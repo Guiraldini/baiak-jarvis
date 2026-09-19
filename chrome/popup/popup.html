@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Baiak Jarvis</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header>
+      <span class="signal"></span>
+      <div><strong>BAIAK JARVIS</strong><small>Configuração do copiloto</small></div>
+    </header>
+
+    <label class="toggle-row">
+      <span>Exibir painel no jogo</span>
+      <input id="enabled" type="checkbox">
+    </label>
+
+    <label class="toggle-row important">
+      <span><b>Automatizar stamina</b><small>Alterna treino e hunt</small></span>
+      <input id="automation-enabled" type="checkbox">
+    </label>
+
+    <label class="toggle-row">
+      <span><b>Recuperar quedas</b><small>Recarrega o jogo travado</small></span>
+      <input id="auto-reload" type="checkbox">
+    </label>
+
+    <label for="objective">Objetivo principal</label>
+    <select id="objective">
+      <option value="balanced">Equilíbrio</option>
+      <option value="xp">Experiência</option>
+      <option value="profit">Lucro</option>
+      <option value="safety">Segurança</option>
+    </select>
+
+    <label for="interval">Atualização</label>
+    <select id="interval">
+      <option value="750">0,75 segundo</option>
+      <option value="1500">1,5 segundo</option>
+      <option value="3000">3 segundos</option>
+    </select>
+
+    <div class="cycle-grid">
+      <div>
+        <label for="stamina-floor">Começar treino em</label>
+        <div class="number-field"><input id="stamina-floor" type="number" min="1" max="90" step="1"><span>%</span></div>
+      </div>
+      <div>
+        <label for="training-duration">Tempo de treino</label>
+        <div class="number-field"><input id="training-duration" type="number" min="15" max="600" step="15"><span>min</span></div>
+      </div>
+    </div>
+    <label for="hunt-name">Hunt automática</label>
+    <input id="hunt-name" type="text" value="Cobras" spellcheck="false">
+    <p class="hint">Com VIP: 16% + 2h de treino = cerca de 54%, suficientes para 16h de hunt.</p>
+
+    <div id="status">Configurações salvas automaticamente.</div>
+    <button id="clear" type="button">Limpar histórico local</button>
+    <script src="popup.js"></script>
+  </body>
+</html>

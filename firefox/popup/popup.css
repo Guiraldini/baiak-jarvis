@@ -1,0 +1,22 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { width: 286px; margin: 0; padding: 16px; color: #edf2f7; background: #0d1219; font: 13px/1.4 Inter, system-ui, sans-serif; }
+header { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; }
+header strong { display: block; color: #e7b84e; font-size: 12px; letter-spacing: .13em; }
+header small { display: block; color: #8f9baa; }
+.signal { width: 9px; height: 9px; border-radius: 50%; background: #43d17c; box-shadow: 0 0 10px #43d17c; }
+label { display: block; margin: 13px 0 5px; color: #aeb9c6; font-size: 11px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 14px; padding: 10px; color: #edf2f7; background: #151c25; border-radius: 7px; }
+.toggle-row span { display: flex; flex-direction: column; }
+.toggle-row small { color: #7f8b99; font-size: 9px; }
+.toggle-row.important { border: 1px solid #80682f; }
+.toggle-row input { width: auto; }
+select, button, input { width: 100%; padding: 9px 10px; color: #edf2f7; background: #151c25; border: 1px solid #273241; border-radius: 6px; }
+.cycle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.number-field { position: relative; }
+.number-field input { padding-right: 36px; }
+.number-field span { position: absolute; top: 9px; right: 9px; color: #7f8b99; pointer-events: none; }
+.hint { margin: 10px 0 0; color: #8f9baa; font-size: 10px; }
+button { margin-top: 12px; cursor: pointer; }
+button:hover { border-color: #80682f; }
+#status { min-height: 17px; margin-top: 13px; color: #7f8b99; font-size: 10px; }
