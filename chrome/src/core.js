@@ -59,17 +59,20 @@
       });
     }
 
-    const partyPattern = new RegExp(`([A-Za-zÀ-ÿ0-9_-]{2,24})\\s+(${VOCATIONS})\\s*[·|]?\\s*lvl\\s*(\\d+)`, "gi");
+    const partyPattern = new RegExp(`(?:\\b(SUP|TANK|DPS)\\s+)?([A-Za-zÀ-ÿ0-9_-]{2,24})\\s+(${VOCATIONS})\\s*[·|]?\\s*lvl\\s*(\\d+)`, "gi");
     while ((match = partyPattern.exec(text)) !== null) {
-      const name = clean(match[1]);
+      const role = match[1] ? match[1].toUpperCase() : null;
+      const name = clean(match[2]);
       const existing = results.find((item) => item.name.toLowerCase() === name.toLowerCase());
       if (existing) {
-        existing.level = Number(match[3]);
+        existing.level = Number(match[4]);
+        if (role) existing.role = role;
       } else {
         results.push({
           name,
-          vocation: match[2],
-          level: Number(match[3]),
+          vocation: match[3],
+          role,
+          level: Number(match[4]),
           skillType: null,
           skillLevel: null,
           skillProgress: null
@@ -78,17 +81,19 @@
     }
 
     const vitalsPattern = new RegExp(
-      `([A-Za-zÀ-ÿ0-9_-]{2,24})\\s+(${VOCATIONS})\\s*[·|]\\s*lvl\\s*(\\d+)\\s+([\\d.]+)\\/([\\d.]+)\\s+([\\d.]+)\\/([\\d.]+)\\s+(\\d+)%`,
+      `(?:\\b(SUP|TANK|DPS)\\s+)?([A-Za-zÀ-ÿ0-9_-]{2,24})\\s+(${VOCATIONS})\\s*[·|]\\s*lvl\\s*(\\d+)\\s+([\\d.]+)\\/([\\d.]+)\\s+([\\d.]+)\\/([\\d.]+)\\s+(\\d+)%`,
       "gi"
     );
     while ((match = vitalsPattern.exec(text)) !== null) {
-      const name = clean(match[1]);
+      const role = match[1] ? match[1].toUpperCase() : null;
+      const name = clean(match[2]);
       const existing = results.find((item) => item.name.toLowerCase() === name.toLowerCase());
       if (!existing) continue;
-      existing.level = Number(match[3]);
-      existing.hp = numberFromPtBr(match[5]);
-      existing.mana = numberFromPtBr(match[7]);
-      existing.levelProgress = Number(match[8]);
+      existing.level = Number(match[4]);
+      if (role) existing.role = role;
+      existing.hp = numberFromPtBr(match[6]);
+      existing.mana = numberFromPtBr(match[8]);
+      existing.levelProgress = Number(match[9]);
     }
     return results;
   }
@@ -312,6 +317,22 @@
     };
   }
 
+  function findPartyKnight(snapshot, profiles) {
+    const characters = snapshot && Array.isArray(snapshot.characters) ? snapshot.characters : [];
+    const candidates = characters
+      .filter((character) => normalizeLookup(character.vocation) === "knight")
+      .sort((a, b) => Number(b.role === "TANK") - Number(a.role === "TANK"));
+    const character = candidates[0];
+    if (!character) return null;
+    const saved = profiles && Object.values(profiles)
+      .find((profile) => normalizeLookup(profile.name) === normalizeLookup(character.name));
+    const merged = { ...(saved || {}) };
+    for (const [key, value] of Object.entries(character)) {
+      if (value != null) merged[key] = value;
+    }
+    return merged;
+  }
+
   function automationDecision(snapshot, options) {
     if (!snapshot || !snapshot.stamina) return null;
     const config = {
@@ -413,6 +434,7 @@
     numberFromPtBr,
     parseSnapshot,
     compareKnightToStage,
+    findPartyKnight,
     automationDecision,
     normalizeLookup,
     staminaPlan,

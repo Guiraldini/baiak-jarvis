@@ -17,30 +17,8 @@
     autoReload: true,
     huntName: "Cobras"
   };
-  const seededProfiles = {
-    Gabsm: {
-      name: "Gabsm", vocation: "Druid", role: "SUP", level: 267, hp: 1571, mana: 10115,
-      skillType: "Magic", skillLevel: 99, attack: "Magia +3%", attackElements: ["earth"],
-      defense: "HP +9,5% · Mana +25,5% · Cura +22,3%", protections: {},
-      sustain: "Life leech +1,2% · Regen HP +0,3%"
-    },
-    Maxxi: {
-      name: "Maxxi", vocation: "Knight", role: "TANK", level: 234, hp: 3906, mana: 1220,
-      skillType: "Melee", skillLevel: 96, attack: "Físico · Melee 96", attackElements: ["physical"],
-      defense: "Def +5,5 · Armor +3,5 · HP +8,2%",
-      protections: { physical: 0.2, energy: 0.2, earth: 0.2, fire: 0.2, ice: 0.2, holy: 0.2, death: 0.2 },
-      sustain: "Life leech +0,9% · Gift of Life"
-    },
-    Maxi: {
-      name: "Maxi", vocation: "Sorcerer", role: "DPS", level: 238, hp: 1290, mana: 7226,
-      skillType: "Magic", skillLevel: 94, attack: "Magia +57% · Crítico +1,3% / +13%",
-      attackElements: ["energy", "fire", "death"], elementDamage: { energy: 8.4, fire: 8.4, death: 7.8 },
-      defense: "HP 1.290 · perfil ofensivo", protections: {}, sustain: "Life leech +0,4%"
-    }
-  };
-
   let settings = { ...defaults };
-  let profiles = JSON.parse(JSON.stringify(seededProfiles));
+  let profiles = {};
   let latestSnapshot = null;
   let latestPlan = null;
   let timer = null;
@@ -118,11 +96,38 @@
     return core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
   }
 
+  function genericProfile(character) {
+    const vocation = character.vocation || "";
+    const skill = character.skillLevel ? `${character.skillType || "Skill"} ${character.skillLevel}` : "skill aguardando leitura";
+    const presets = {
+      Knight: { role: "TANK", attack: `Físico · ${skill}`, attackElements: ["physical"] },
+      Druid: { role: "SUP", attack: `Magia · ${skill}`, attackElements: [] },
+      Sorcerer: { role: "DPS", attack: `Magia · ${skill}`, attackElements: [] },
+      Paladin: { role: "DPS", attack: `Distância · ${skill}`, attackElements: ["physical"] }
+    };
+    const preset = presets[vocation] || { role: vocation, attack: skill, attackElements: [] };
+    return {
+      name: character.name,
+      vocation,
+      role: character.role || preset.role,
+      attack: preset.attack,
+      attackElements: preset.attackElements,
+      defense: "Bônus de equipamento ainda não visíveis",
+      protections: {},
+      sustain: null
+    };
+  }
+
   function mergeLiveProfiles(snapshot) {
     for (const character of snapshot.characters) {
-      const current = profiles[character.name] || { name: character.name, protections: {}, attackElements: [] };
-      for (const key of ["vocation", "level", "hp", "mana", "skillType", "skillLevel", "skillProgress", "levelProgress"]) {
+      const current = profiles[character.name] || genericProfile(character);
+      for (const key of ["vocation", "role", "level", "hp", "mana", "skillType", "skillLevel", "skillProgress", "levelProgress"]) {
         if (character[key] != null) current[key] = character[key];
+      }
+      if (!profiles[character.name]) Object.assign(current, genericProfile({ ...character, ...current }));
+      if (current.vocation === "Knight") {
+        current.attack = `Físico · ${current.skillType || "Melee"} ${current.skillLevel || "—"}`;
+        current.attackElements = ["physical"];
       }
       profiles[character.name] = current;
     }
@@ -309,7 +314,11 @@
 
   function renderProfiles(snapshot) {
     const orderedNames = snapshot.characters.map((item) => item.name);
-    const ordered = [...new Set([...orderedNames, "Gabsm", "Maxxi", "Maxi"])].map((name) => profiles[name]).filter(Boolean);
+    const ordered = [...new Set(orderedNames)].map((name) => profiles[name]).filter(Boolean);
+    if (!ordered.length) {
+      host.querySelector("#bj-characters").innerHTML = `<div class="bj-stage-status">Aguardando os personagens aparecerem no painel Party.</div>`;
+      return;
+    }
     host.querySelector("#bj-characters").innerHTML = ordered.map((profile) => {
       const skill = profile.skillLevel ? `${profile.skillType} ${profile.skillLevel}${profile.skillProgress != null ? ` (${profile.skillProgress}%)` : ""}` : "Skill —";
       const attacks = (profile.attackElements || []).map((element) => `<em>${elementLabel(element)}</em>`).join("");
@@ -447,15 +456,18 @@
     }
     if (!stageState.data) return;
     const stage = stageState.data;
-    const matchup = core.compareKnightToStage(stage, profiles.Maxxi);
+    const knight = core.findPartyKnight(latestSnapshot, profiles);
+    const matchup = core.compareKnightToStage(stage, knight);
+    const knightName = knight?.name || "Knight não detectado";
     const required = matchup.requiredProtection.map(elementLabel).join(", ") || "não informado";
     const danger = matchup.mostDangerous;
     target.innerHTML = `
       <div class="bj-stage-head"><strong>${escapeHtml(stage.title)}</strong><span>${stage.level ? `nível ${stage.level}+` : "catálogo"}</span></div>
       <article class="bj-matchup bj-${matchup.severity}">
-        <b>MAXXI × FASE</b><strong>${escapeHtml(matchup.verdict)}</strong>
+        <b>${escapeHtml(knightName.toUpperCase())} × FASE</b><strong>${escapeHtml(matchup.verdict)}</strong>
+        ${knight ? "" : "<span>Abra ou expanda o painel Party para identificar automaticamente o Knight.</span>"}
         <span>Ataque principal: Físico · Proteções pedidas: ${escapeHtml(required)}.</span>
-        ${danger ? `<span>Maior golpe: ${escapeHtml(danger.name)} · ${formatNumber(danger.maxDamage)} (${matchup.hitPercent == null ? "—" : matchup.hitPercent.toFixed(1) + "%"} do HP bruto do Maxxi).</span>` : ""}
+        ${danger ? `<span>Maior golpe: ${escapeHtml(danger.name)} · ${formatNumber(danger.maxDamage)} (${matchup.hitPercent == null ? "HP do Knight não visível" : matchup.hitPercent.toFixed(1) + "% do HP bruto de " + escapeHtml(knightName)}).</span>` : ""}
       </article>
       <div class="bj-monsters">${stage.monsters.map((monster) => `
         <article><div><strong>${escapeHtml(monster.name)}</strong><span>${escapeHtml(monster.note)}</span></div>

@@ -2,17 +2,17 @@ const assert = require("node:assert/strict");
 const core = require("../chrome/src/core.js");
 
 const fixture = `
-BAIAK IDLE Gabsm 74.774.148
+BAIAK IDLE NatureMage 74.774.148
 Stamina 18:25 Cai caçando · use o Treino online para recuperar 43%
 Treino online treinando Loop
 Training Information
-Gabsm · Druid · Magic 99 (60%)
-Maxxi · Knight · Melee 96 (41%)
-Maxi · Sorcerer · Magic 94 (75%)
+NatureMage · Druid · Magic 99 (60%)
+Steelguard · Knight · Melee 96 (41%)
+Arcana · Sorcerer · Magic 94 (75%)
 Party
-Gabsm Druid · lvl 267
-Maxxi Knight · lvl 234
-Maxi Sorcerer · lvl 238
+SUP NatureMage Druid · lvl 267
+TANK Steelguard Knight · lvl 234
+DPS Arcana Sorcerer · lvl 238
 Backpack Slots 6 / 74
 Supply Pouch
 Loot Pouch Slots 0 / 42
@@ -21,20 +21,36 @@ Loot Pouch Slots 0 / 42
 
 const snapshot = core.parseSnapshot({
   text: fixture,
-  title: "Gabsm · Treino online — Baiak Idle",
+  title: "NatureMage · Treino online — Baiak Idle",
   location: "Treino online",
   loopEnabled: true,
   now: 12345
 });
 
-assert.equal(snapshot.player, "Gabsm");
+assert.equal(snapshot.player, "NatureMage");
 assert.deepEqual(snapshot.stamina, { time: "18:25", percent: 43 });
 assert.deepEqual(snapshot.backpack, { used: 6, total: 74 });
 assert.deepEqual(snapshot.lootPouch, { used: 0, total: 42 });
 assert.equal(snapshot.inboxCount, 1115);
 assert.equal(snapshot.gold, 74774148);
 assert.equal(snapshot.characters.length, 3);
-assert.equal(snapshot.characters.find((item) => item.name === "Maxxi").level, 234);
+assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").level, 234);
+assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").role, "TANK");
+
+const detectedKnight = core.findPartyKnight(snapshot, {
+  Steelguard: { name: "Steelguard", vocation: "Knight", hp: 5000, protections: { earth: 4 } }
+});
+assert.equal(detectedKnight.name, "Steelguard");
+assert.equal(detectedKnight.hp, 5000);
+assert.equal(detectedKnight.role, "TANK");
+
+const twoKnights = {
+  characters: [
+    { name: "KnightDps", vocation: "Knight", role: "DPS" },
+    { name: "PartyTank", vocation: "Knight", role: "TANK" }
+  ]
+};
+assert.equal(core.findPartyKnight(twoKnights, {}).name, "PartyTank");
 
 const recommendations = core.buildRecommendations(snapshot, "balanced");
 assert.ok(recommendations.some((item) => item.id === "inbox"));
