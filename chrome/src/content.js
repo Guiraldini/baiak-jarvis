@@ -28,6 +28,8 @@
   let automationBusy = false;
   let lastAutomationAt = 0;
   let lastGameMutationAt = Date.now();
+  let skillsScanBusy = false;
+  let lastSkillsScanAt = 0;
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -90,10 +92,149 @@
     return !/expirado|inactive|inativo/i.test(description);
   }
 
+  function readPartyCharacters() {
+    return [...document.querySelectorAll("#party-list .member")].map((member) => {
+      const name = core.clean(member.querySelector(".m-name")?.textContent);
+      const role = core.clean(member.querySelector(".role")?.textContent).toUpperCase() || null;
+      const meta = core.clean(member.querySelector(".m-meta")?.textContent);
+      const match = meta.match(/(Druid|Knight|Sorcerer|Paladin)\s*[·|]\s*lvl\s*(\d+)/i);
+      const hp = core.parseVitalBar(member.querySelector(".bar.hp b")?.textContent || member.querySelector(".bar.hp")?.dataset.tip);
+      const mana = core.parseVitalBar(member.querySelector(".bar.mana b")?.textContent || member.querySelector(".bar.mana")?.dataset.tip);
+      const levelProgress = core.numberFromPtBr(member.querySelector(".bar.xp b")?.textContent);
+      if (!name || !match) return null;
+      return {
+        name,
+        vocation: match[1][0].toUpperCase() + match[1].slice(1).toLowerCase(),
+        role,
+        level: Number(match[2]),
+        currentHp: hp?.current ?? null,
+        hp: hp?.max ?? null,
+        currentMana: mana?.current ?? null,
+        mana: mana?.max ?? null,
+        levelProgress
+      };
+    }).filter(Boolean);
+  }
+
+  function mergeCharacters(parsed, structural) {
+    const result = [...parsed];
+    for (const character of structural) {
+      const existing = result.find((item) => core.normalizeLookup(item.name) === core.normalizeLookup(character.name));
+      if (existing) Object.assign(existing, Object.fromEntries(Object.entries(character).filter(([, value]) => value != null)));
+      else result.push(character);
+    }
+    return result;
+  }
+
   function readSnapshot() {
     const gameRoot = document.querySelector("#app") || document.body;
     const location = (document.querySelector("#wave-title")?.textContent || "").replace(/▾/g, "");
-    return core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
+    const snapshot = core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
+    snapshot.characters = mergeCharacters(snapshot.characters, readPartyCharacters());
+    return snapshot;
+  }
+
+  function valueRows(selector) {
+    return [...document.querySelectorAll(selector)].map((row) => {
+      const cells = row.querySelectorAll(":scope > span");
+      return { label: core.clean(cells[0]?.textContent), value: core.clean(cells[1]?.textContent) };
+    }).filter((item) => item.label && item.value);
+  }
+
+  function vocationFromPanel(value) {
+    const normalized = core.normalizeLookup(value);
+    if (normalized.includes("knight")) return "Knight";
+    if (normalized.includes("druid")) return "Druid";
+    if (normalized.includes("sorcerer")) return "Sorcerer";
+    if (normalized.includes("paladin")) return "Paladin";
+    return null;
+  }
+
+  function readSelectedSkillProfile(button) {
+    const name = core.clean(button?.textContent);
+    const vocation = vocationFromPanel(document.querySelector("#skills-panel-body .sk-voc")?.textContent || button?.title);
+    const primarySkill = ({ Knight: "Melee", Druid: "Magic", Sorcerer: "Magic", Paladin: "Distance" })[vocation];
+    const skillRows = [...document.querySelectorAll("#skills-panel-body .sk-skill:not(#sk-xp-row)")].map((row) => {
+      const cells = row.querySelectorAll(".sk-row > span");
+      return {
+        label: core.clean(cells[0]?.textContent),
+        value: core.clean(cells[1]?.textContent),
+        progress: Number.parseFloat(row.querySelector(".sk-bar i")?.style.width) || null
+      };
+    });
+    const skill = skillRows.find((item) => item.label === primarySkill);
+    const skillNumbers = skill?.value.match(/-?[\d.,]+/g) || [];
+    const bonusEntries = valueRows("#skills-panel-body .sk-bonuses .sk-stat");
+    const protections = {};
+    const damageBonuses = {};
+    for (const entry of bonusEntries) {
+      const elements = core.elementMentions(entry.label);
+      if (/^prote[cç][aã]o\b/i.test(entry.label)) {
+        for (const element of elements) protections[element] = core.numberFromPtBr(entry.value);
+      }
+      if (/^dano\b/i.test(entry.label)) {
+        for (const element of elements) damageBonuses[element] = core.numberFromPtBr(entry.value);
+      }
+    }
+    const equipment = [...document.querySelectorAll("#skills-panel-body .sk-itemstats .sk-itemblock")].map((block) => ({
+      name: core.clean(block.querySelector(".sk-itemstat-name")?.textContent),
+      bonuses: [...block.querySelectorAll(":scope > .sk-stat")].map((row) => {
+        const cells = row.querySelectorAll(":scope > span");
+        return { label: core.clean(cells[0]?.textContent), value: core.clean(cells[1]?.textContent) };
+      }).filter((entry) => entry.label && entry.value)
+    })).filter((item) => item.name);
+    const basic = Object.fromEntries(valueRows("#skills-panel-body > .sk-stats:not(.sk-bonuses):not(.sk-itemstats)").map((item) => [item.label, item.value]));
+    const bonusMap = Object.fromEntries(bonusEntries.map((item) => [core.normalizeLookup(item.label), item.value]));
+    const defenseParts = ["defesa", "armadura"].filter((key) => bonusMap[key]).map((key) => `${key[0].toUpperCase() + key.slice(1)} ${bonusMap[key]}`);
+    const sustainParts = ["life leech", "mana leech"].filter((key) => bonusMap[key]).map((key) => `${key === "life leech" ? "Life" : "Mana"} Leech ${bonusMap[key]}`);
+    return {
+      name,
+      vocation,
+      level: core.numberFromPtBr(basic["Nível"]),
+      hp: core.numberFromPtBr(basic["Pontos de Vida"]),
+      mana: core.numberFromPtBr(basic.Mana),
+      skillType: primarySkill,
+      skillLevel: core.numberFromPtBr(skillNumbers[0]),
+      skillBonus: core.numberFromPtBr(skillNumbers[1]),
+      skillProgress: skill?.progress,
+      bonusEntries,
+      protections,
+      damageBonuses,
+      equipment,
+      defense: defenseParts.length ? defenseParts.join(" · ") : `${Object.keys(protections).length} proteções elementais detectadas`,
+      sustain: sustainParts.join(" · ") || null
+    };
+  }
+
+  async function scanSkillsPanel(force) {
+    if (skillsScanBusy || (!force && Date.now() - lastSkillsScanAt < 30000)) return;
+    const buttons = [...document.querySelectorAll("#skills-members .sk-mem")];
+    if (!buttons.length) return;
+    skillsScanBusy = true;
+    const original = buttons.find((button) => button.classList.contains("on")) || buttons[0];
+    try {
+      for (const button of buttons) {
+        button.click();
+        for (let attempt = 0; attempt < 10 && !button.classList.contains("on"); attempt += 1) await delay(25);
+        await delay(50);
+        const scanned = readSelectedSkillProfile(button);
+        if (!scanned.name) continue;
+        const current = profiles[scanned.name] || genericProfile(scanned);
+        Object.assign(current, Object.fromEntries(Object.entries(scanned).filter(([, value]) => value != null)));
+        const skillText = `${current.skillType || "Skill"} ${current.skillLevel || "—"}${current.skillBonus ? ` +${current.skillBonus}` : ""}`;
+        current.attack = `${current.vocation === "Knight" ? "Físico" : current.vocation === "Paladin" ? "Distância" : "Magia"} · ${skillText}`;
+        current.attackElements = [...new Set([...(current.vocation === "Knight" || current.vocation === "Paladin" ? ["physical"] : []), ...Object.keys(current.damageBonuses || {})])];
+        profiles[scanned.name] = current;
+      }
+      if (original && !original.classList.contains("on")) {
+        original.click();
+        await delay(50);
+      }
+      lastSkillsScanAt = Date.now();
+      if (latestSnapshot) renderProfiles(latestSnapshot);
+    } finally {
+      skillsScanBusy = false;
+    }
   }
 
   function genericProfile(character) {
@@ -121,13 +262,13 @@
   function mergeLiveProfiles(snapshot) {
     for (const character of snapshot.characters) {
       const current = profiles[character.name] || genericProfile(character);
-      for (const key of ["vocation", "role", "level", "hp", "mana", "skillType", "skillLevel", "skillProgress", "levelProgress"]) {
+      for (const key of ["vocation", "role", "level", "currentHp", "hp", "currentMana", "mana", "skillType", "skillLevel", "skillBonus", "skillProgress", "levelProgress"]) {
         if (character[key] != null) current[key] = character[key];
       }
       if (!profiles[character.name]) Object.assign(current, genericProfile({ ...character, ...current }));
       if (current.vocation === "Knight") {
-        current.attack = `Físico · ${current.skillType || "Melee"} ${current.skillLevel || "—"}`;
-        current.attackElements = ["physical"];
+        current.attack = `Físico · ${current.skillType || "Melee"} ${current.skillLevel || "—"}${current.skillBonus ? ` +${current.skillBonus}` : ""}`;
+        current.attackElements = [...new Set(["physical", ...Object.keys(current.damageBonuses || {})])];
       }
       profiles[character.name] = current;
     }
@@ -139,6 +280,11 @@
 
   function formatNumber(value) {
     return Number.isFinite(value) ? new Intl.NumberFormat("pt-BR").format(value) : "—";
+  }
+
+  function formatVital(current, maximum) {
+    if (Number.isFinite(current) && Number.isFinite(maximum)) return `${formatNumber(current)}/${formatNumber(maximum)}`;
+    return formatNumber(maximum);
   }
 
   function formatStamina(minutes) {
@@ -320,18 +466,25 @@
       return;
     }
     host.querySelector("#bj-characters").innerHTML = ordered.map((profile) => {
-      const skill = profile.skillLevel ? `${profile.skillType} ${profile.skillLevel}${profile.skillProgress != null ? ` (${profile.skillProgress}%)` : ""}` : "Skill —";
+      const skill = profile.skillLevel ? `${profile.skillType} ${profile.skillLevel}${profile.skillBonus ? ` +${profile.skillBonus}` : ""}${profile.skillProgress != null ? ` (${Math.round(profile.skillProgress)}%)` : ""}` : "Skill —";
       const attacks = (profile.attackElements || []).map((element) => `<em>${elementLabel(element)}</em>`).join("");
       const entries = Object.entries(profile.protections || {});
       const max = entries.length ? Math.max(...entries.map(([, value]) => value)) : null;
       const strongest = max == null ? "não detectada" : entries.filter(([, value]) => value === max).map(([element]) => elementLabel(element)).join(", ");
+      const damageEntries = Object.entries(profile.damageBonuses || {});
+      const maxDamage = damageEntries.length ? Math.max(...damageEntries.map(([, value]) => value)) : null;
+      const strongestDamage = maxDamage == null ? "não detectado" : damageEntries.filter(([, value]) => value === maxDamage).map(([element]) => elementLabel(element)).join(", ");
+      const bonuses = (profile.bonusEntries || []).map((item) => `<span>${escapeHtml(item.label)} <b>${escapeHtml(item.value)}</b></span>`).join("");
+      const equipment = (profile.equipment || []).map((item) => `<li><b>${escapeHtml(item.name)}</b>${item.bonuses.map((entry) => `<span>${escapeHtml(entry.label)} ${escapeHtml(entry.value)}</span>`).join("")}</li>`).join("");
       return `<article class="bj-profile ${profile.vocation === "Knight" ? "bj-knight" : ""}">
         <div class="bj-profile-head"><strong>${escapeHtml(profile.name)}</strong><span>${escapeHtml(profile.role || profile.vocation || "")} · Nv. ${escapeHtml(profile.level || "—")}</span></div>
-        <div class="bj-vitals"><span>♥ ${formatNumber(profile.hp)}</span><span>◆ ${formatNumber(profile.mana)}</span><span>${escapeHtml(skill)}</span></div>
+        <div class="bj-vitals"><span>♥ ${formatVital(profile.currentHp, profile.hp)}</span><span>◆ ${formatVital(profile.currentMana, profile.mana)}</span><span>${escapeHtml(skill)}</span></div>
         <div class="bj-power-row"><b>ATQ</b><span>${escapeHtml(profile.attack || "Aguardando leitura")}</span>${attacks}</div>
         <div class="bj-power-row"><b>DEF</b><span>${escapeHtml(profile.defense || "Aguardando leitura")}</span></div>
-        ${profile.vocation === "Knight" ? `<div class="bj-power-row"><b>MAIOR DEF. ELEMENTAL</b><span>${escapeHtml(strongest)}${max != null ? ` · ${max}% na árvore` : ""}</span></div>` : ""}
+        ${profile.vocation === "Knight" ? `<div class="bj-power-row"><b>MAIOR DEF. ELEMENTAL</b><span>${escapeHtml(strongest)}${max != null ? ` · ${max}% total` : ""}</span></div><div class="bj-power-row"><b>MAIOR BÔNUS DE DANO</b><span>${escapeHtml(strongestDamage)}${maxDamage != null ? ` · +${maxDamage}%` : ""}</span></div>` : ""}
         ${profile.sustain ? `<div class="bj-power-row"><b>SUSTAIN</b><span>${escapeHtml(profile.sustain)}</span></div>` : ""}
+        ${bonuses ? `<details class="bj-profile-details"><summary>Bônus detectados (${profile.bonusEntries.length})</summary><div class="bj-bonus-list">${bonuses}</div></details>` : ""}
+        ${equipment ? `<details class="bj-profile-details"><summary>Equipamentos (${profile.equipment.length})</summary><ul class="bj-equipment-list">${equipment}</ul></details>` : ""}
       </article>`;
     }).join("");
   }
@@ -489,10 +642,11 @@
     await ext.storage.local.set({ bjHistory: history, bjLatest: core.compactHistory(snapshot), bjProfiles: profiles });
   }
 
-  function tick() {
+  function tick(forceSkillsScan) {
     if (!settings.enabled) return;
     latestSnapshot = readSnapshot();
     render(latestSnapshot);
+    scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
 
@@ -528,7 +682,7 @@
 
   host.addEventListener("click", async (event) => {
     const action = event.target.closest("button")?.dataset.action;
-    if (action === "refresh") tick();
+    if (action === "refresh") tick(true);
     if (action === "reload-stage") {
       stageState.key = null;
       maybeLoadStage(latestSnapshot?.location).catch(() => {});
@@ -576,7 +730,9 @@
 
   const gameRoot = document.querySelector("#app");
   if (gameRoot) {
-    new MutationObserver(() => { lastGameMutationAt = Date.now(); }).observe(gameRoot, {
+    new MutationObserver(() => {
+      if (!skillsScanBusy) lastGameMutationAt = Date.now();
+    }).observe(gameRoot, {
       subtree: true, childList: true, characterData: true, attributes: true
     });
   }

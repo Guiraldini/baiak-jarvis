@@ -57,6 +57,9 @@ assert.ok(recommendations.some((item) => item.id === "inbox"));
 assert.ok(recommendations.some((item) => item.id === "training"));
 
 assert.equal(core.numberFromPtBr("74.774.148"), 74774148);
+assert.deepEqual(core.parseVitalBar("5.631/5.631"), { current: 5631, max: 5631 });
+assert.deepEqual(core.parseVitalBar("1.567 / 1.700"), { current: 1567, max: 1700 });
+assert.equal(core.parseVitalBar("sem leitura"), null);
 assert.equal(core.usage({ used: 6, total: 12 }), 0.5);
 
 const vipTrainingPlan = core.staminaPlan(snapshot, { vipActive: true });

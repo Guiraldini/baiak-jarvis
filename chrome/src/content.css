@@ -102,6 +102,15 @@
 #baiak-jarvis .bj-power-row b { min-width: 31px; color: #8ea0b4; font-size: 8px; letter-spacing: .06em; }
 #baiak-jarvis .bj-power-row span { color: #d4dce6; font-size: 9.5px; }
 #baiak-jarvis .bj-power-row em { padding: 1px 4px; color: #f1c766; background: rgba(231,184,78,.1); border-radius: 3px; font-size: 8px; font-style: normal; }
+#baiak-jarvis .bj-profile-details { margin-top: 5px; border-top: 1px solid rgba(255,255,255,.045); }
+#baiak-jarvis .bj-profile-details summary { padding-top: 5px; color: #e7b84e; font-size: 8.5px; cursor: pointer; }
+#baiak-jarvis .bj-bonus-list { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 5px; }
+#baiak-jarvis .bj-bonus-list span { padding: 2px 4px; color: #bfc9d5; background: rgba(255,255,255,.045); border-radius: 3px; font-size: 8px; }
+#baiak-jarvis .bj-bonus-list b { color: #f1c766; font-weight: 600; }
+#baiak-jarvis .bj-equipment-list { margin: 5px 0 0; padding: 0; list-style: none; }
+#baiak-jarvis .bj-equipment-list li { margin-top: 4px; padding: 4px; background: rgba(255,255,255,.035); border-radius: 4px; }
+#baiak-jarvis .bj-equipment-list li > b { display: block; color: #dce4ed; font-size: 8.5px; }
+#baiak-jarvis .bj-equipment-list li > span { display: inline-block; margin: 2px 4px 0 0; color: #9faebe; font-size: 8px; }
 #baiak-jarvis .bj-hidden-section { display: none; }
 #baiak-jarvis .bj-stage-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
 #baiak-jarvis .bj-stage-head strong { font-size: 13px; }

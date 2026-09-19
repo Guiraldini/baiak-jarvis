@@ -18,6 +18,12 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function parseVitalBar(value) {
+    const match = String(value || "").match(/([\d.,]+)\s*\/\s*([\d.,]+)/);
+    if (!match) return null;
+    return { current: numberFromPtBr(match[1]), max: numberFromPtBr(match[2]) };
+  }
+
   function firstMatch(text, expression, transform) {
     const match = text.match(expression);
     if (!match) return null;
@@ -432,6 +438,7 @@
     elementMentions,
     formatMinutes,
     numberFromPtBr,
+    parseVitalBar,
     parseSnapshot,
     compareKnightToStage,
     findPartyKnight,
