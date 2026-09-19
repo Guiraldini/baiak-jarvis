@@ -170,10 +170,10 @@
     for (const entry of bonusEntries) {
       const elements = core.elementMentions(entry.label);
       if (/^prote[cç][aã]o\b/i.test(entry.label)) {
-        for (const element of elements) protections[element] = core.numberFromPtBr(entry.value);
+        for (const element of elements) protections[element] = core.percentFromPtBr(entry.value);
       }
       if (/^dano\b/i.test(entry.label)) {
-        for (const element of elements) damageBonuses[element] = core.numberFromPtBr(entry.value);
+        for (const element of elements) damageBonuses[element] = core.percentFromPtBr(entry.value);
       }
     }
     const equipment = [...document.querySelectorAll("#skills-panel-body .sk-itemstats .sk-itemblock")].map((block) => ({
@@ -459,6 +459,10 @@
   }
 
   function renderProfiles(snapshot) {
+    const openDetails = new Set([...host.querySelectorAll("#bj-characters .bj-profile-details[open]")].map((details) => {
+      const profileName = details.closest(".bj-profile")?.dataset.profile || "";
+      return `${profileName}|${details.dataset.detail || ""}`;
+    }));
     const orderedNames = snapshot.characters.map((item) => item.name);
     const ordered = [...new Set(orderedNames)].map((name) => profiles[name]).filter(Boolean);
     if (!ordered.length) {
@@ -476,15 +480,17 @@
       const strongestDamage = maxDamage == null ? "não detectado" : damageEntries.filter(([, value]) => value === maxDamage).map(([element]) => elementLabel(element)).join(", ");
       const bonuses = (profile.bonusEntries || []).map((item) => `<span>${escapeHtml(item.label)} <b>${escapeHtml(item.value)}</b></span>`).join("");
       const equipment = (profile.equipment || []).map((item) => `<li><b>${escapeHtml(item.name)}</b>${item.bonuses.map((entry) => `<span>${escapeHtml(entry.label)} ${escapeHtml(entry.value)}</span>`).join("")}</li>`).join("");
-      return `<article class="bj-profile ${profile.vocation === "Knight" ? "bj-knight" : ""}">
+      const bonusOpen = openDetails.has(`${profile.name}|bonuses`) ? " open" : "";
+      const equipmentOpen = openDetails.has(`${profile.name}|equipment`) ? " open" : "";
+      return `<article class="bj-profile ${profile.vocation === "Knight" ? "bj-knight" : ""}" data-profile="${escapeHtml(profile.name)}">
         <div class="bj-profile-head"><strong>${escapeHtml(profile.name)}</strong><span>${escapeHtml(profile.role || profile.vocation || "")} · Nv. ${escapeHtml(profile.level || "—")}</span></div>
         <div class="bj-vitals"><span>♥ ${formatVital(profile.currentHp, profile.hp)}</span><span>◆ ${formatVital(profile.currentMana, profile.mana)}</span><span>${escapeHtml(skill)}</span></div>
         <div class="bj-power-row"><b>ATQ</b><span>${escapeHtml(profile.attack || "Aguardando leitura")}</span>${attacks}</div>
         <div class="bj-power-row"><b>DEF</b><span>${escapeHtml(profile.defense || "Aguardando leitura")}</span></div>
         ${profile.vocation === "Knight" ? `<div class="bj-power-row"><b>MAIOR DEF. ELEMENTAL</b><span>${escapeHtml(strongest)}${max != null ? ` · ${max}% total` : ""}</span></div><div class="bj-power-row"><b>MAIOR BÔNUS DE DANO</b><span>${escapeHtml(strongestDamage)}${maxDamage != null ? ` · +${maxDamage}%` : ""}</span></div>` : ""}
         ${profile.sustain ? `<div class="bj-power-row"><b>SUSTAIN</b><span>${escapeHtml(profile.sustain)}</span></div>` : ""}
-        ${bonuses ? `<details class="bj-profile-details"><summary>Bônus detectados (${profile.bonusEntries.length})</summary><div class="bj-bonus-list">${bonuses}</div></details>` : ""}
-        ${equipment ? `<details class="bj-profile-details"><summary>Equipamentos (${profile.equipment.length})</summary><ul class="bj-equipment-list">${equipment}</ul></details>` : ""}
+        ${bonuses ? `<details class="bj-profile-details" data-detail="bonuses"${bonusOpen}><summary>Bônus detectados (${profile.bonusEntries.length})</summary><div class="bj-bonus-list">${bonuses}</div></details>` : ""}
+        ${equipment ? `<details class="bj-profile-details" data-detail="equipment"${equipmentOpen}><summary>Equipamentos (${profile.equipment.length})</summary><ul class="bj-equipment-list">${equipment}</ul></details>` : ""}
       </article>`;
     }).join("");
   }

@@ -18,6 +18,14 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function percentFromPtBr(value) {
+    if (value == null || value === "") return null;
+    let normalized = String(value).replace(/[%+\s]/g, "");
+    if (normalized.includes(",")) normalized = normalized.replace(/\./g, "").replace(",", ".");
+    const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   function parseVitalBar(value) {
     const match = String(value || "").match(/([\d.,]+)\s*\/\s*([\d.,]+)/);
     if (!match) return null;
@@ -438,6 +446,7 @@
     elementMentions,
     formatMinutes,
     numberFromPtBr,
+    percentFromPtBr,
     parseVitalBar,
     parseSnapshot,
     compareKnightToStage,
