@@ -79,6 +79,9 @@ assert.equal(huntSummary[0].huntName, "Dragon Lair");
 assert.equal(huntSummary[0].xpPerHour, 13500000);
 assert.equal(huntSummary.find((item) => item.huntName === "Cobras").runs, 2);
 assert.equal(Math.round(huntSummary.find((item) => item.huntName === "Cobras").averageDurationSeconds), 630);
+assert.equal(core.bossModeDetected({ badgeText: "Boss" }), true);
+assert.equal(core.bossModeDetected({ partyManageTitle: "Não dá pra mexer na party durante um boss." }), true);
+assert.equal(core.bossModeDetected({ badgeText: "", partyManageTitle: "Gerenciar party" }), false);
 
 const vipTrainingPlan = core.staminaPlan(snapshot, { vipActive: true });
 assert.equal(vipTrainingPlan.phase, "train");

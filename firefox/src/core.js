@@ -187,6 +187,15 @@
     })).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
   }
 
+  function bossModeDetected(input) {
+    const signal = normalizeLookup([
+      input && input.badgeText,
+      input && input.partyManageTitle,
+      input && input.partyManageTip
+    ].filter(Boolean).join(" "));
+    return /\b(boss|bosses|chefe|chefes)\b/.test(signal);
+  }
+
   function durationToMinutes(value) {
     const match = String(value || "").match(/^(\d{1,3}):(\d{2})$/);
     if (!match) return null;
@@ -516,6 +525,7 @@
 
   return {
     buildRecommendations,
+    bossModeDetected,
     clean,
     compactHistory,
     durationToMinutes,

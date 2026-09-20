@@ -677,23 +677,35 @@
 
   function readHuntTelemetry(snapshot) {
     const huntName = core.clean(snapshot?.location).replace(/▾/g, "");
-    const timerText = core.clean(document.querySelector("#run-timer")?.textContent);
+    const timerElement = document.querySelector("#run-timer");
+    const timerText = core.clean(timerElement?.textContent);
     const durationSeconds = core.elapsedToSeconds(timerText);
     const dots = [...document.querySelectorAll("#wave-dots > i")];
     const currentIndex = dots.findIndex((dot) => dot.classList.contains("now"));
+    const partyManage = document.querySelector("#party-manage");
+    const bossMode = core.bossModeDetected({
+      badgeText: document.querySelector("#bar-shooters .bar-pvp-tag")?.textContent,
+      partyManageTitle: partyManage?.title,
+      partyManageTip: partyManage?.dataset.tip
+    });
+    const timerVisible = isVisible(timerElement);
+    const xpGain = readAnalyzerNumber("#an-raw");
     return {
       huntName,
       durationSeconds,
       timerText,
       waveNumber: currentIndex >= 0 ? currentIndex + 1 : null,
       waveCount: dots.length || null,
-      xpGain: readAnalyzerNumber("#an-raw"),
+      xpGain,
       kills: readAnalyzerNumber("#an-kills"),
       loot: readAnalyzerNumber("#an-loot"),
       supplies: readAnalyzerNumber("#an-supplies"),
       balance: readAnalyzerNumber("#an-balance"),
       capturedAt: snapshot?.capturedAt || Date.now(),
-      valid: isHuntLocation(huntName) && Number.isFinite(durationSeconds) && Number.isFinite(readAnalyzerNumber("#an-raw"))
+      bossMode,
+      timerVisible,
+      invalidReason: bossMode ? "boss" : !timerVisible ? "outside-hunt" : null,
+      valid: !bossMode && timerVisible && isHuntLocation(huntName) && Number.isFinite(durationSeconds) && Number.isFinite(xpGain)
     };
   }
 
@@ -751,7 +763,9 @@
     const telemetry = readHuntTelemetry(snapshot);
     if (!telemetry.valid) {
       huntTracker = null;
-      huntMonitorMessage = "Aguardando uma hunt começar.";
+      huntMonitorMessage = telemetry.invalidReason === "boss"
+        ? "Modo Chefes detectado: tempo e XP do boss estão sendo ignorados."
+        : "Aguardando uma hunt começar.";
       return;
     }
     if (!huntTracker || core.normalizeLookup(huntTracker.huntName) !== core.normalizeLookup(telemetry.huntName)) {
@@ -822,8 +836,8 @@
     }
 
     const recent = [...huntRuns].sort((a, b) => b.completedAt - a.completedAt).slice(0, 20);
-    host.querySelector("#bj-run-history").innerHTML = recent.length ? `<div class="bj-run-table"><div class="bj-run-row bj-run-table-head"><span>Hunt</span><span>Tempo</span><span>XP</span><span>XP/h</span></div>${recent.map((run) => `
-      <div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span>${formatNumber(run.xpGain)}</span><span>${formatNumber(Math.round(runXpPerHour(run)))}</span></div>`).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
+    host.querySelector("#bj-run-history").innerHTML = recent.length ? `<div class="bj-run-table"><div class="bj-run-row bj-run-table-head"><span>Hunt</span><span>Tempo</span><span>XP</span><span>XP/h</span><span></span></div>${recent.map((run) => `
+      <div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span>${formatNumber(run.xpGain)}</span><span>${formatNumber(Math.round(runXpPerHour(run)))}</span><button type="button" class="bj-delete-run" data-action="delete-hunt-run" data-run-id="${escapeHtml(run.id)}" title="Excluir esta medição">×</button></div>`).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
   }
 
   function lookupKey(value) {
@@ -1060,6 +1074,12 @@
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
+    if (action === "delete-hunt-run") {
+      const id = event.target.closest("button")?.dataset.runId;
+      huntRuns = huntRuns.filter((run) => run.id !== id);
+      await ext.storage.local.set({ bjHuntRuns: huntRuns });
+      renderHuntHistory();
+    }
     if (action === "reload-stage") {
       maybeLoadStage(latestSnapshot?.location, true).catch(() => {});
     }
