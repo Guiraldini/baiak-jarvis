@@ -80,14 +80,9 @@ assert.equal(huntSummary[0].xpPerHour, 13500000);
 assert.equal(huntSummary.find((item) => item.huntName === "Cobras").runs, 2);
 assert.equal(Math.round(huntSummary.find((item) => item.huntName === "Cobras").averageDurationSeconds), 630);
 assert.equal(huntSummary.find((item) => item.huntName === "Cobras").averageLoot, 350000);
-assert.equal(Math.round(huntSummary.find((item) => item.huntName === "Cobras").latestXpPerHour), 11454545);
-assert.ok(huntSummary.find((item) => item.huntName === "Cobras").xpPerHourChangePercent < 0);
-const levelGains = core.calculateLevelProgressGains(
-  [{ name: "NatureMage", level: 388, levelProgress: 94.893 }, { name: "Steelguard", level: 350, levelProgress: 38.6078 }],
-  [{ name: "NatureMage", level: 389, levelProgress: 1.25 }, { name: "Steelguard", level: 350, levelProgress: 39.1078 }]
-);
-assert.equal(Math.round(levelGains[0].percentGained * 1000) / 1000, 6.357);
-assert.equal(Math.round(levelGains[1].percentGained * 10) / 10, 0.5);
+assert.equal(Math.round(core.relativeDifference(18076309, 17056836) * 100) / 100, 5.98);
+assert.equal(Math.round(core.relativeDifference(17056836, 18076309) * 100) / 100, -5.64);
+assert.equal(core.relativeDifference(100, 0), null);
 assert.equal(core.bossModeDetected({ badgeText: "Boss" }), true);
 assert.equal(core.bossModeDetected({ partyManageTitle: "Não dá pra mexer na party durante um boss." }), true);
 assert.equal(core.bossModeDetected({ badgeText: "", partyManageTitle: "Gerenciar party" }), false);

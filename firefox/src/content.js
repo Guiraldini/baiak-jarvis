@@ -134,10 +134,7 @@
       const match = meta.match(/(Druid|Knight|Sorcerer|Paladin)\s*[·|]\s*lvl\s*(\d+)/i);
       const hp = core.parseVitalBar(member.querySelector(".bar.hp b")?.textContent || member.querySelector(".bar.hp")?.dataset.tip);
       const mana = core.parseVitalBar(member.querySelector(".bar.mana b")?.textContent || member.querySelector(".bar.mana")?.dataset.tip);
-      const preciseLevelProgress = Number.parseFloat(member.querySelector(".bar.xp i")?.style.width);
-      const levelProgress = Number.isFinite(preciseLevelProgress)
-        ? preciseLevelProgress
-        : core.numberFromPtBr(member.querySelector(".bar.xp b")?.textContent);
+      const levelProgress = core.numberFromPtBr(member.querySelector(".bar.xp b")?.textContent);
       if (!name || !match) return null;
       return {
         name,
@@ -704,12 +701,6 @@
       loot: readAnalyzerNumber("#an-loot"),
       supplies: readAnalyzerNumber("#an-supplies"),
       balance: readAnalyzerNumber("#an-balance"),
-      player: snapshot?.player || null,
-      characters: (snapshot?.characters || []).map((character) => ({
-        name: character.name,
-        level: character.level,
-        levelProgress: character.levelProgress
-      })),
       capturedAt: snapshot?.capturedAt || Date.now(),
       bossMode,
       timerVisible,
@@ -728,8 +719,6 @@
       startLoot: telemetry.loot,
       startSupplies: telemetry.supplies,
       startBalance: telemetry.balance,
-      player: telemetry.player,
-      startCharacters: telemetry.characters,
       lastXp: telemetry.xpGain,
       lastDurationSeconds: telemetry.durationSeconds,
       lastWaveNumber: telemetry.waveNumber,
@@ -763,9 +752,7 @@
       kills: metricDelta(telemetry.kills, huntTracker.startKills),
       loot: metricDelta(telemetry.loot, huntTracker.startLoot),
       supplies: metricDelta(telemetry.supplies, huntTracker.startSupplies),
-      balance: metricDelta(telemetry.balance, huntTracker.startBalance),
-      levelGains: core.calculateLevelProgressGains(huntTracker.startCharacters, telemetry.characters),
-      player: huntTracker.player
+      balance: metricDelta(telemetry.balance, huntTracker.startBalance)
     };
     huntRuns = [...huntRuns, record].slice(-200);
     huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
@@ -834,23 +821,9 @@
     return `${value >= 0 ? "+" : ""}${formatDecimal(value, 2)}${suffix}`;
   }
 
-  function primaryLevelGain(run) {
-    const gains = Array.isArray(run?.levelGains) ? run.levelGains : [];
-    return gains.find((gain) => core.normalizeLookup(gain.name) === core.normalizeLookup(run?.player)) || gains[0] || null;
-  }
-
-  function renderLevelGainComparison(latestRun, previousRun) {
-    const latest = Array.isArray(latestRun?.levelGains) ? latestRun.levelGains : [];
-    const previous = Array.isArray(previousRun?.levelGains) ? previousRun.levelGains : [];
-    if (!latest.length) return `<span class="bj-level-empty">% de nível disponível nas próximas waves</span>`;
-    return latest.map((gain) => {
-      const old = previous.find((item) => core.normalizeLookup(item.name) === core.normalizeLookup(gain.name));
-      const difference = old ? gain.percentGained - old.percentGained : null;
-      const comparison = Number.isFinite(difference)
-        ? `<em class="${difference >= 0 ? "bj-up" : "bj-down"}">${formatSignedPercent(difference, " p.p.")}</em>`
-        : "";
-      return `<span><b>${escapeHtml(gain.name)}</b> ${formatSignedPercent(gain.percentGained)} ${comparison}</span>`;
-    }).join("");
+  function formatSignedNumber(value) {
+    if (!Number.isFinite(value)) return "—";
+    return `${value >= 0 ? "+" : "−"}${formatNumber(Math.abs(Math.round(value)))}`;
   }
 
   function renderHuntHistory() {
@@ -868,27 +841,34 @@
       comparison.innerHTML = `<div class="bj-empty-state">Ainda não há wave completa. Deixe a hunt rodar da wave 1 até o boss.</div>`;
     } else {
       const maxRate = Math.max(...summaries.map((item) => item.xpPerHour), 1);
-      comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => `
-        <article class="${index === 0 ? "bj-best-hunt" : ""}">
+      comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => {
+        const reference = summaries.length > 1 ? (index === 0 ? summaries[1] : summaries[0]) : null;
+        const xpPercent = reference ? core.relativeDifference(item.xpPerHour, reference.xpPerHour) : null;
+        const xpDifference = reference ? item.xpPerHour - reference.xpPerHour : null;
+        const goldDifference = reference && Number.isFinite(item.averageBalance) && Number.isFinite(reference.averageBalance)
+          ? item.averageBalance - reference.averageBalance
+          : null;
+        const goldPercent = reference ? core.relativeDifference(item.averageBalance, reference.averageBalance) : null;
+        return `<article class="${index === 0 ? "bj-best-hunt" : ""}">
           <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><b>Média ${formatNumber(Math.round(item.xpPerHour))} XP/h</b></div>
           <div class="bj-rate-bar"><i style="width:${Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1)}%"></i></div>
           <small>Média recalculada com ${item.runs} ${item.runs === 1 ? "wave" : "waves"} · ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave</small>
+          ${reference ? `<div class="bj-versus">
+            <b class="${xpPercent >= 0 ? "bj-up" : "bj-down"}">${formatSignedPercent(xpPercent)} de rendimento de XP</b>
+            <span>comparado com ${escapeHtml(reference.huntName)}</span>
+            <small>Diferença: ${formatSignedNumber(xpDifference)} XP/h · ${formatSignedNumber(goldDifference)} gold/wave${Number.isFinite(goldPercent) ? ` (${formatSignedPercent(goldPercent)})` : ""}</small>
+          </div>` : ""}
           <div class="bj-hunt-metrics">
-            <span><b>Última</b>${formatNumber(Math.round(item.latestXpPerHour))} XP/h</span>
-            <span><b>Vs. anterior</b><em class="${item.xpPerHourChangePercent >= 0 ? "bj-up" : "bj-down"}">${formatSignedPercent(item.xpPerHourChangePercent)}</em></span>
             <span><b>Loot médio</b>${Number.isFinite(item.averageLoot) ? formatNumber(Math.round(item.averageLoot)) : "—"} gold</span>
             <span><b>Lucro médio</b>${Number.isFinite(item.averageBalance) ? formatNumber(Math.round(item.averageBalance)) : "—"} gold</span>
           </div>
-          <div class="bj-level-comparison"><b>GANHO DE NÍVEL NA ÚLTIMA WAVE · diferença da anterior</b><div>${renderLevelGainComparison(item.latestRun, item.previousRun)}</div></div>
-        </article>`).join("")}</div>`;
+        </article>`;
+      }).join("")}</div>`;
     }
 
     const recent = [...huntRuns].sort((a, b) => b.completedAt - a.completedAt).slice(0, 20);
-    host.querySelector("#bj-run-history").innerHTML = recent.length ? `<div class="bj-run-table"><div class="bj-run-row bj-run-table-head"><span>Hunt</span><span>Tempo</span><span>XP</span><span>Loot</span><span>Lucro</span><span>Nível</span><span></span></div>${recent.map((run) => {
-      const levelGain = primaryLevelGain(run);
-      const allLevelGains = (run.levelGains || []).map((gain) => `${gain.name} ${formatSignedPercent(gain.percentGained)}`).join(" · ");
-      return `<div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span><b>${formatNumber(run.xpGain)}</b><small>${formatNumber(Math.round(runXpPerHour(run)))} XP/h</small></span><span>${formatNumber(run.loot)}</span><span>${formatNumber(run.balance)}</span><span title="${escapeHtml(allLevelGains)}">${levelGain ? formatSignedPercent(levelGain.percentGained) : "—"}<small>${escapeHtml(levelGain?.name || "")}</small></span><button type="button" class="bj-delete-run" data-action="delete-hunt-run" data-run-id="${escapeHtml(run.id)}" title="Excluir esta medição">×</button></div>`;
-    }).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
+    host.querySelector("#bj-run-history").innerHTML = recent.length ? `<div class="bj-run-table"><div class="bj-run-row bj-run-table-head"><span>Hunt</span><span>Tempo</span><span>XP</span><span>Loot</span><span>Lucro</span><span></span></div>${recent.map((run) => `
+      <div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span><b>${formatNumber(run.xpGain)}</b><small>${formatNumber(Math.round(runXpPerHour(run)))} XP/h</small></span><span>${formatNumber(run.loot)}</span><span>${formatNumber(run.balance)}</span><button type="button" class="bj-delete-run" data-action="delete-hunt-run" data-run-id="${escapeHtml(run.id)}" title="Excluir esta medição">×</button></div>`).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
   }
 
   function lookupKey(value) {

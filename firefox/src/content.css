@@ -184,21 +184,18 @@
 #baiak-jarvis .bj-rate-bar { height: 5px; margin: 6px 0; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden; }
 #baiak-jarvis .bj-rate-bar i { display: block; height: 100%; background: linear-gradient(90deg, #438fd1, #43d17c); border-radius: inherit; }
 #baiak-jarvis .bj-comparison-list small { color: var(--bj-muted); font-size: 8.5px; }
-#baiak-jarvis .bj-hunt-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 7px; }
+#baiak-jarvis .bj-versus { margin-top: 7px; padding: 7px; background: rgba(0,0,0,.16); border-left: 2px solid #65a7ff; border-radius: 4px; }
+#baiak-jarvis .bj-versus > b, #baiak-jarvis .bj-versus > span, #baiak-jarvis .bj-versus > small { display: block; }
+#baiak-jarvis .bj-versus > b { font-size: 10px; }
+#baiak-jarvis .bj-versus > span { margin-top: 1px; color: #aeb9c6; font-size: 8px; }
+#baiak-jarvis .bj-versus > small { margin-top: 3px; color: #8493a3; font-size: 8px; }
+#baiak-jarvis .bj-hunt-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-top: 7px; }
 #baiak-jarvis .bj-hunt-metrics span { padding: 5px; color: #d8e0e9; background: rgba(0,0,0,.16); border-radius: 4px; font-size: 8.5px; }
 #baiak-jarvis .bj-hunt-metrics b { display: block; margin-bottom: 1px; color: #7f8d9d; font-size: 7px; text-transform: uppercase; }
-#baiak-jarvis .bj-hunt-metrics em, #baiak-jarvis .bj-level-comparison em { font-style: normal; }
 #baiak-jarvis .bj-up { color: #69d995; }
 #baiak-jarvis .bj-down { color: #ef8a8a; }
-#baiak-jarvis .bj-level-comparison { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.05); }
-#baiak-jarvis .bj-level-comparison > b { color: #8ea0b4; font-size: 7px; letter-spacing: .05em; }
-#baiak-jarvis .bj-level-comparison > div { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-#baiak-jarvis .bj-level-comparison span { padding: 3px 5px; color: #c6d0dc; background: rgba(255,255,255,.045); border-radius: 4px; font-size: 8px; }
-#baiak-jarvis .bj-level-comparison span b { color: var(--bj-text); }
-#baiak-jarvis .bj-level-comparison span em { margin-left: 3px; }
-#baiak-jarvis .bj-level-comparison .bj-level-empty { color: var(--bj-muted); }
 #baiak-jarvis .bj-run-table { overflow: hidden; border: 1px solid rgba(255,255,255,.06); border-radius: 7px; }
-#baiak-jarvis .bj-run-row { display: grid; grid-template-columns: minmax(100px, 1.2fr) 56px minmax(82px, .9fr) 72px 72px 68px 24px; gap: 6px; align-items: center; padding: 7px 8px; color: #c7d0dc; border-top: 1px solid rgba(255,255,255,.05); font-size: 9px; }
+#baiak-jarvis .bj-run-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 58px minmax(100px, .9fr) 82px 82px 24px; gap: 7px; align-items: center; padding: 7px 8px; color: #c7d0dc; border-top: 1px solid rgba(255,255,255,.05); font-size: 9px; }
 #baiak-jarvis .bj-run-row:first-child { border-top: 0; }
 #baiak-jarvis .bj-run-table-head { color: #7f8d9d; background: rgba(255,255,255,.035); font-size: 8px; text-transform: uppercase; }
 #baiak-jarvis .bj-run-row b, #baiak-jarvis .bj-run-row small { display: block; }
@@ -215,7 +212,6 @@
   #baiak-jarvis #bj-optimizer-frame { height: calc(100vh - 190px); min-height: 360px; }
   #baiak-jarvis .bj-hunts-view { height: auto; max-height: calc(100vh - 190px); }
   #baiak-jarvis .bj-hunt-summary, #baiak-jarvis .bj-comparison-list { grid-template-columns: 1fr; }
-  #baiak-jarvis .bj-hunt-metrics { grid-template-columns: 1fr 1fr; }
   #baiak-jarvis .bj-run-table { overflow-x: auto; }
-  #baiak-jarvis .bj-run-row { min-width: 610px; grid-template-columns: minmax(90px, 1.2fr) 52px 82px 68px 68px 64px 22px; gap: 4px; padding: 6px; }
+  #baiak-jarvis .bj-run-row { min-width: 530px; grid-template-columns: minmax(90px, 1.2fr) 52px 92px 72px 72px 22px; gap: 4px; padding: 6px; }
 }

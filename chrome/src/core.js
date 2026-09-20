@@ -170,7 +170,7 @@
       const huntName = clean(run && run.huntName);
       if (!huntName || run?.durationSeconds == null || run?.xpGain == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(xpGain) || xpGain < 0) continue;
       const key = normalizeLookup(huntName);
-      const current = groups.get(key) || { huntName, runs: 0, totalDurationSeconds: 0, totalXp: 0, totalLoot: 0, lootRuns: 0, totalBalance: 0, balanceRuns: 0, bestXpPerHour: 0, records: [] };
+      const current = groups.get(key) || { huntName, runs: 0, totalDurationSeconds: 0, totalXp: 0, totalLoot: 0, lootRuns: 0, totalBalance: 0, balanceRuns: 0, bestXpPerHour: 0 };
       const xpPerHour = xpGain * 3600 / durationSeconds;
       current.huntName = huntName;
       current.runs += 1;
@@ -185,50 +185,23 @@
         current.balanceRuns += 1;
       }
       current.bestXpPerHour = Math.max(current.bestXpPerHour, xpPerHour);
-      current.records.push(run);
       groups.set(key, current);
     }
-    return [...groups.values()].map((group) => {
-      const ordered = [...group.records].sort((a, b) => Number(a.completedAt || 0) - Number(b.completedAt || 0));
-      const latestRun = ordered.at(-1) || null;
-      const previousRun = ordered.at(-2) || null;
-      const latestXpPerHour = latestRun ? latestRun.xpGain * 3600 / latestRun.durationSeconds : null;
-      const previousXpPerHour = previousRun ? previousRun.xpGain * 3600 / previousRun.durationSeconds : null;
-      const xpPerHourChangePercent = previousXpPerHour > 0 ? (latestXpPerHour - previousXpPerHour) / previousXpPerHour * 100 : null;
-      return {
+    return [...groups.values()].map((group) => ({
         ...group,
-        records: undefined,
-        latestRun,
-        previousRun,
-        latestXpPerHour,
-        previousXpPerHour,
-        xpPerHourChangePercent,
         averageDurationSeconds: group.totalDurationSeconds / group.runs,
         averageXp: group.totalXp / group.runs,
         averageLoot: group.lootRuns ? group.totalLoot / group.lootRuns : null,
         averageBalance: group.balanceRuns ? group.totalBalance / group.balanceRuns : null,
         xpPerHour: group.totalXp * 3600 / group.totalDurationSeconds
-      };
-    }).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
+      })).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
   }
 
-  function calculateLevelProgressGains(startCharacters, endCharacters) {
-    const starts = Array.isArray(startCharacters) ? startCharacters : [];
-    const ends = Array.isArray(endCharacters) ? endCharacters : [];
-    return ends.map((end) => {
-      const start = starts.find((item) => normalizeLookup(item.name) === normalizeLookup(end.name));
-      const startLevel = Number(start && start.level);
-      const endLevel = Number(end && end.level);
-      const startProgress = Number(start && start.levelProgress);
-      const endProgress = Number(end && end.levelProgress);
-      if (!start || !Number.isFinite(startLevel) || !Number.isFinite(endLevel) || !Number.isFinite(startProgress) || !Number.isFinite(endProgress)) return null;
-      const levelsAdvanced = endLevel - startLevel;
-      if (levelsAdvanced < 0) return null;
-      const percentGained = levelsAdvanced === 0
-        ? endProgress - startProgress
-        : (100 - startProgress) + Math.max(0, levelsAdvanced - 1) * 100 + endProgress;
-      return { name: end.name, startLevel, endLevel, startProgress, endProgress, percentGained: Math.max(0, percentGained) };
-    }).filter(Boolean);
+  function relativeDifference(value, baseline) {
+    const current = Number(value);
+    const reference = Number(baseline);
+    if (!Number.isFinite(current) || !Number.isFinite(reference) || reference === 0) return null;
+    return (current - reference) / Math.abs(reference) * 100;
   }
 
   function bossModeDetected(input) {
@@ -570,7 +543,6 @@
   return {
     buildRecommendations,
     bossModeDetected,
-    calculateLevelProgressGains,
     clean,
     compactHistory,
     durationToMinutes,
@@ -579,6 +551,7 @@
     formatMinutes,
     numberFromPtBr,
     percentFromPtBr,
+    relativeDifference,
     parseVitalBar,
     parseSnapshot,
     compareKnightToStage,

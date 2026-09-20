@@ -2,7 +2,7 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
-## Versão 0.8.0
+## Versão 0.8.1
 
 - troca para **Treino online** ao chegar em `6:43` de stamina, aproximadamente 16%;
 - troca para **Cobras** ao chegar em `22:43`, aproximadamente 54%;
@@ -41,16 +41,16 @@ Extensão local para acompanhar a party do Baiak Idle, analisar a hunt seleciona
 - permite excluir individualmente uma medição incorreta no histórico de waves.
 - consolida execuções repetidas da mesma hunt em um único comparativo;
 - recalcula automaticamente a média de XP/h a cada nova wave concluída;
-- compara a última wave com a anterior e mostra a variação percentual de rendimento;
+- compara a média de cada hunt com as outras e mostra a vantagem ou desvantagem percentual de XP/h;
 - registra loot bruto e lucro líquido de cada wave, além das médias por hunt;
-- mede o percentual decimal de nível ganho por personagem em cada wave;
-- compara o ganho de nível da última wave com a anterior em pontos percentuais.
+- mostra a diferença absoluta de XP/h e de gold por wave entre as hunts;
+- compara a melhor hunt com a segunda colocada e as demais com a melhor.
 
 As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.1.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -61,7 +61,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.1.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -81,4 +81,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.8.0 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.1 AUTO · execução local`.
