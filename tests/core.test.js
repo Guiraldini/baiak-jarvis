@@ -106,6 +106,14 @@ assert.equal(cobraMatchup.physicalResistance, true);
 assert.equal(cobraMatchup.mostDangerous.name, "Cobra Assassin");
 assert.ok(cobraMatchup.hitPercent > 5 && cobraMatchup.hitPercent < 6);
 
+const balanceAdvice = core.buildBalanceAdvice(cobraStage, [
+  { name: "PartyTank", vocation: "Knight", skillType: "Melee", skillLevel: 100, skillBonus: 7, protections: { physical: 10, earth: 6, death: 11 }, bonusEntries: [{ label: "Chance de crítico", value: "+1%" }] },
+  { name: "PartyMage", vocation: "Sorcerer", skillType: "Magic", skillLevel: 103, skillBonus: 21, protections: { physical: 3, earth: 0, death: 6 }, bonusEntries: [] }
+]);
+assert.deepEqual(balanceAdvice.suggestedDamage, ["holy"]);
+assert.ok(balanceAdvice.speed.some((item) => item.includes("resistência física")));
+assert.ok(balanceAdvice.survival.some((item) => item.includes("PartyMage") && item.includes("Terra")));
+
 const startTraining = core.automationDecision({
   ...snapshot,
   location: "Cobras",

@@ -91,6 +91,9 @@
 .bj-auto[data-status="error"] { border-color: #a94343; }
 .bj-auto[data-status="error"] .bj-auto-dot, .bj-auto[data-status="disabled"] .bj-auto-dot { background: #d45d5d; box-shadow: none; }
 .bj-auto[data-status="success"] { border-color: #2f8354; }
+#baiak-jarvis .bj-hunt-choice { display: block; margin-top: 8px; }
+#baiak-jarvis .bj-hunt-choice span { display: block; margin-bottom: 4px; color: #7f8d9d; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+#baiak-jarvis .bj-hunt-choice select { width: 100%; padding: 6px 7px; color: var(--bj-text); background: #0d141d; border: 1px solid #2b3948; border-radius: 5px; font: 10px Inter, system-ui, sans-serif; }
 #baiak-jarvis .bj-profile { margin-top: 7px; padding: 9px; color: var(--bj-muted); background: var(--bj-panel); border: 1px solid rgba(255,255,255,.055); border-radius: 7px; }
 #baiak-jarvis .bj-profile.bj-knight { border-color: rgba(231,184,78,.24); }
 #baiak-jarvis .bj-profile-head, #baiak-jarvis .bj-vitals { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
@@ -112,6 +115,8 @@
 #baiak-jarvis .bj-equipment-list li > b { display: block; color: #dce4ed; font-size: 8.5px; }
 #baiak-jarvis .bj-equipment-list li > span { display: inline-block; margin: 2px 4px 0 0; color: #9faebe; font-size: 8px; }
 #baiak-jarvis .bj-hidden-section { display: none; }
+#baiak-jarvis .bj-stage > summary { list-style: disclosure-closed; cursor: pointer; }
+#baiak-jarvis .bj-stage[open] > summary { list-style: disclosure-open; }
 #baiak-jarvis .bj-stage-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
 #baiak-jarvis .bj-stage-head strong { font-size: 13px; }
 #baiak-jarvis .bj-stage-head span { color: var(--bj-muted); font-size: 9px; }
@@ -126,6 +131,13 @@
 #baiak-jarvis .bj-matchup b { display: block; color: var(--bj-gold); font-size: 8px; letter-spacing: .09em; }
 #baiak-jarvis .bj-matchup strong { display: block; margin: 3px 0; font-size: 10.5px; }
 #baiak-jarvis .bj-matchup span { display: block; color: #bac5d1; font-size: 9px; }
+#baiak-jarvis .bj-balance { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
+#baiak-jarvis .bj-balance section { padding: 7px; background: var(--bj-panel); border-radius: 6px; }
+#baiak-jarvis .bj-balance section:first-child { border-top: 2px solid #e7b84e; }
+#baiak-jarvis .bj-balance section:last-child { border-top: 2px solid #43d17c; }
+#baiak-jarvis .bj-balance b { color: #dce4ed; font-size: 8px; letter-spacing: .07em; }
+#baiak-jarvis .bj-balance ul { margin: 5px 0 0; padding-left: 13px; }
+#baiak-jarvis .bj-balance li { margin-top: 3px; color: #aeb9c6; font-size: 8px; line-height: 1.35; }
 #baiak-jarvis .bj-monsters article { margin-top: 6px; padding: 7px 8px; background: var(--bj-panel); border-radius: 6px; }
 #baiak-jarvis .bj-monsters article > div { display: flex; justify-content: space-between; gap: 8px; }
 #baiak-jarvis .bj-monsters article > div strong { font-size: 10px; }

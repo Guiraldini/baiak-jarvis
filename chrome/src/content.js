@@ -30,6 +30,9 @@
   let lastGameMutationAt = Date.now();
   let skillsScanBusy = false;
   let lastSkillsScanAt = 0;
+  let huntOptions = ["Cobras"];
+  let huntScanBusy = false;
+  let refreshBusy = false;
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -59,15 +62,16 @@
       <section class="bj-auto" id="bj-auto">
         <div><span class="bj-auto-dot"></span><strong id="bj-auto-title">AUTOMAÇÃO</strong></div>
         <small id="bj-auto-message">Aguardando leitura da stamina.</small>
+        <label class="bj-hunt-choice"><span>Hunt após o treino</span><select id="bj-hunt-select" title="Hunt automática"></select></label>
       </section>
       <details class="bj-details" open>
         <summary>Poder da party</summary>
         <div id="bj-characters"></div>
       </details>
-      <section class="bj-stage bj-hidden-section" id="bj-stage">
-        <div class="bj-section-title">ANÁLISE DA HUNT</div>
+      <details class="bj-stage bj-hidden-section" id="bj-stage">
+        <summary class="bj-section-title">ANÁLISE DA HUNT</summary>
         <div id="bj-stage-content"></div>
-      </section>
+      </details>
       <section><div class="bj-section-title">RECOMENDAÇÕES</div><div id="bj-recommendations"></div></section>
       <footer>Jarvis ${extensionVersion} AUTO · execução local</footer>
     </div>`;
@@ -207,7 +211,12 @@
   }
 
   async function scanSkillsPanel(force) {
-    if (skillsScanBusy || (!force && Date.now() - lastSkillsScanAt < 30000)) return;
+    if (skillsScanBusy) {
+      if (!force) return;
+      for (let attempt = 0; attempt < 100 && skillsScanBusy; attempt += 1) await delay(50);
+      if (skillsScanBusy) return;
+    }
+    if (!force && Date.now() - lastSkillsScanAt < 30000) return;
     const buttons = [...document.querySelectorAll("#skills-members .sk-mem")];
     if (!buttons.length) return;
     skillsScanBusy = true;
@@ -311,6 +320,7 @@
     });
     renderCycle(latestPlan);
     renderAutomationStatus();
+    renderHuntOptions();
     renderProfiles(snapshot);
 
     const recommendations = core.buildRecommendations(snapshot, settings.objective);
@@ -338,6 +348,19 @@
       : "Ative pelo botão da extensão.";
   }
 
+  function renderHuntOptions() {
+    const select = host.querySelector("#bj-hunt-select");
+    if (!select) return;
+    const selected = settings.huntName || "Cobras";
+    const names = [...new Set([selected, ...huntOptions].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const signature = names.join("\n");
+    if (select.dataset.signature !== signature) {
+      select.innerHTML = names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+      select.dataset.signature = signature;
+    }
+    select.value = selected;
+  }
+
   function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -352,41 +375,141 @@
     return singularCurrent.includes(singularWanted) || singularWanted.includes(singularCurrent);
   }
 
-  function visibleActivityCandidates() {
-    return [...document.querySelectorAll('button, [role="option"], [role="menuitem"], [data-wave], [data-wave-id], .wave-option, .dropdown-item')]
-      .filter((element) => {
-        if (host.contains(element) || element.id === "wave-title") return false;
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-      });
+  function isVisible(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
   }
 
-  function chooseCandidate(candidates, target) {
-    const wanted = core.normalizeLookup(target).replace(/s$/, "");
-    return candidates.map((element) => {
-      const text = core.normalizeLookup(element.textContent).replace(/s$/, "");
-      let score = 99;
-      if (text === wanted) score = 0;
-      else if (text.startsWith(`${wanted} `)) score = 1;
-      else if (text.includes(wanted)) score = 2;
-      return { element, score, length: text.length };
-    }).filter((item) => item.score < 99).sort((a, b) => a.score - b.score || a.length - b.length)[0]?.element || null;
+  async function waitForElement(selector, timeoutMs = 5000) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      const element = document.querySelector(selector);
+      if (isVisible(element)) return element;
+      await delay(50);
+    }
+    return null;
+  }
+
+  function setSearchValue(input, value) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (setter) setter.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function openHuntPicker() {
+    const toggle = document.querySelector("#wave-title");
+    if (!toggle) throw new Error("O seletor de atividade não apareceu no jogo.");
+    let picker = document.querySelector("#picker-modal .pick-search");
+    if (isVisible(picker)) return document.querySelector("#picker-modal");
+    if (!isVisible(document.querySelector("#teleport-menu"))) toggle.click();
+    const huntsOption = await waitForElement('#teleport-menu .tp-opt[data-tp="hunts"]', 2500);
+    if (!huntsOption) throw new Error("A opção Hunts não apareceu no menu de teleportes.");
+    huntsOption.click();
+    picker = await waitForElement("#picker-modal .pick-search", 5000);
+    if (!picker) throw new Error("A janela de Hunts não abriu.");
+    return document.querySelector("#picker-modal");
+  }
+
+  function closeHuntPicker() {
+    const close = document.querySelector("#picker-modal-close");
+    if (isVisible(close)) close.click();
+  }
+
+  async function filterHuntRows(value) {
+    const search = await waitForElement("#picker-modal .pick-search", 2500);
+    if (!search) throw new Error("O campo de busca das Hunts não apareceu.");
+    setSearchValue(search, value);
+    let previousCount = -1;
+    let stableReads = 0;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await delay(50);
+      const rows = [...document.querySelectorAll("#picker-modal .stage-row")];
+      if (value && rows.some((row) => core.normalizeLookup(row.querySelector(".stage-name-line b")?.textContent) === core.normalizeLookup(value))) return rows;
+      if (!value) {
+        stableReads = rows.length === previousCount ? stableReads + 1 : 0;
+        previousCount = rows.length;
+        if (rows.length > 1 && stableReads >= 3) return rows;
+      }
+    }
+    return [...document.querySelectorAll("#picker-modal .stage-row")];
+  }
+
+  async function scanHuntOptions(force = false) {
+    if (huntScanBusy) {
+      if (!force) return huntOptions;
+      for (let attempt = 0; attempt < 100 && huntScanBusy; attempt += 1) await delay(50);
+      if (huntScanBusy) return huntOptions;
+    }
+    if (!force && huntOptions.length > 1) return huntOptions;
+    huntScanBusy = true;
+    const pickerWasOpen = isVisible(document.querySelector("#picker-modal .pick-search"));
+    try {
+      await openHuntPicker();
+      const rows = await filterHuntRows("");
+      const names = rows.map((row) => core.clean(row.querySelector(".stage-name-line b")?.textContent)).filter(Boolean);
+      if (names.length) {
+        huntOptions = [...new Set(names)];
+        await ext.storage.local.set({ bjHuntOptions: huntOptions });
+        renderHuntOptions();
+      }
+      return huntOptions;
+    } finally {
+      if (!pickerWasOpen) closeHuntPicker();
+      huntScanBusy = false;
+    }
+  }
+
+  async function selectHunt(target) {
+    await openHuntPicker();
+    try {
+      const rows = await filterHuntRows(target);
+      const wanted = core.normalizeLookup(target);
+      const row = rows.find((item) => core.normalizeLookup(item.querySelector(".stage-name-line b")?.textContent) === wanted);
+      if (!row) throw new Error(`A hunt “${target}” não foi encontrada.`);
+      if (!row.classList.contains("expanded")) {
+        (row.querySelector(".stage-info") || row).click();
+        await delay(150);
+      }
+      let huntButton = row.querySelector(".stage-go");
+      for (let attempt = 0; attempt < 20 && !isVisible(huntButton); attempt += 1) {
+        await delay(50);
+        huntButton = row.querySelector(".stage-go");
+      }
+      if (!huntButton || !isVisible(huntButton)) throw new Error(`O botão Caçar de “${target}” não apareceu.`);
+      if (huntButton.disabled) {
+        if (locationMatches(document.querySelector("#wave-title")?.textContent, target)) {
+          closeHuntPicker();
+          return true;
+        }
+        throw new Error(`O botão Caçar de “${target}” está desativado.`);
+      }
+      if (!core.normalizeLookup(huntButton.textContent).includes("cacar")) throw new Error(`O botão Caçar de “${target}” não foi confirmado.`);
+      huntButton.click();
+      for (let attempt = 0; attempt < 32; attempt += 1) {
+        await delay(250);
+        if (locationMatches(document.querySelector("#wave-title")?.textContent, target)) return true;
+      }
+      throw new Error(`O jogo não confirmou a entrada em “${target}”.`);
+    } catch (error) {
+      closeHuntPicker();
+      throw error;
+    }
   }
 
   async function selectActivity(target) {
     const toggle = document.querySelector("#wave-title");
     if (!toggle) throw new Error("O seletor de atividade não apareceu no jogo.");
     if (locationMatches(toggle.textContent, target)) return true;
-    toggle.click();
-    await delay(250);
-    const option = chooseCandidate(visibleActivityCandidates(), target);
-    if (!option) {
-      toggle.click();
-      throw new Error(`A opção “${target}” não foi encontrada no menu.`);
-    }
-    option.click();
-    for (let attempt = 0; attempt < 16; attempt += 1) {
+    if (core.normalizeLookup(target) !== "treino online") return selectHunt(target);
+    if (!isVisible(document.querySelector("#teleport-menu"))) toggle.click();
+    const trainingOption = await waitForElement('#teleport-menu .tp-opt[data-tp="exercise"]', 2500);
+    if (!trainingOption) throw new Error("A opção Treino online não apareceu no menu de teleportes.");
+    trainingOption.click();
+    for (let attempt = 0; attempt < 24; attempt += 1) {
       await delay(250);
       if (locationMatches(document.querySelector("#wave-title")?.textContent, target)) return true;
     }
@@ -406,7 +529,7 @@
   }
 
   async function maybeAutomate(snapshot) {
-    if (!settings.automationEnabled || automationBusy) return;
+    if (!settings.automationEnabled || automationBusy || refreshBusy) return;
     const decision = core.automationDecision(snapshot, {
       enabled: true,
       huntName: settings.huntName || "Cobras",
@@ -563,7 +686,7 @@
     return { title, level, risk, focus, monsters, url, capturedAt: Date.now() };
   }
 
-  async function maybeLoadStage(location) {
+  async function maybeLoadStage(location, force = false) {
     const name = core.clean(location).replace(/▾/g, "");
     const key = lookupKey(name);
     const section = host.querySelector("#bj-stage");
@@ -573,7 +696,7 @@
       return;
     }
     section.classList.remove("bj-hidden-section");
-    if (stageState.key === key) return;
+    if (stageState.key === key && !force) return;
     stageState = { key, status: "loading", data: null, error: null };
     renderStage();
     try {
@@ -587,7 +710,7 @@
       const path = findStagePath(indexRecord.entries || {}, name);
       if (!path) throw new Error(`Fase “${name}” não encontrada no catálogo.`);
       const cached = stored.bjStageCache[key];
-      let data = cached && Date.now() - cached.capturedAt < 7 * 86400000 ? cached : null;
+      let data = !force && cached && Date.now() - cached.capturedAt < 7 * 86400000 ? cached : null;
       if (!data) {
         const response = await fetchGuide(`https://guiabaiakidle.com${path}`);
         data = parseStagePage(response.html, response.url);
@@ -617,6 +740,8 @@
     const stage = stageState.data;
     const knight = core.findPartyKnight(latestSnapshot, profiles);
     const matchup = core.compareKnightToStage(stage, knight);
+    const partyMembers = (latestSnapshot?.characters || []).map((character) => profiles[character.name] || character);
+    const advice = core.buildBalanceAdvice(stage, partyMembers);
     const knightName = knight?.name || "Knight não detectado";
     const required = matchup.requiredProtection.map(elementLabel).join(", ") || "não informado";
     const danger = matchup.mostDangerous;
@@ -628,6 +753,10 @@
         <span>Ataque principal: Físico · Proteções pedidas: ${escapeHtml(required)}.</span>
         ${danger ? `<span>Maior golpe: ${escapeHtml(danger.name)} · ${formatNumber(danger.maxDamage)} (${matchup.hitPercent == null ? "HP do Knight não visível" : matchup.hitPercent.toFixed(1) + "% do HP bruto de " + escapeHtml(knightName)}).</span>` : ""}
       </article>
+      <div class="bj-balance">
+        <section><b>MATAR MAIS RÁPIDO</b><ul>${advice.speed.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+        <section><b>SOBREVIVER</b><ul>${advice.survival.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>
+      </div>
       <div class="bj-monsters">${stage.monsters.map((monster) => `
         <article><div><strong>${escapeHtml(monster.name)}</strong><span>${escapeHtml(monster.note)}</span></div>
         <dl><div><dt>HP</dt><dd>${formatNumber(monster.hp)}</dd></div><div><dt>XP</dt><dd>${formatNumber(monster.xp)}</dd></div><div><dt>Dano</dt><dd>${formatNumber(monster.maxDamage)}</dd></div><div><dt>Armor</dt><dd>${formatNumber(monster.armor)}</dd></div></dl></article>`).join("")}</div>
@@ -648,11 +777,40 @@
     await ext.storage.local.set({ bjHistory: history, bjLatest: core.compactHistory(snapshot), bjProfiles: profiles });
   }
 
+  async function refreshAll() {
+    if (refreshBusy) return;
+    refreshBusy = true;
+    const button = host.querySelector('[data-action="refresh"]');
+    button.disabled = true;
+    button.textContent = "…";
+    button.title = "Atualizando Party, Skills, Hunts e análise";
+    setAutoState("working", "Atualizando Party, equipamentos, lista de Hunts e análise…");
+    try {
+      latestSnapshot = readSnapshot();
+      await scanSkillsPanel(true);
+      await scanHuntOptions(true);
+      latestSnapshot = readSnapshot();
+      mergeLiveProfiles(latestSnapshot);
+      await maybeLoadStage(latestSnapshot.location, true);
+      render(latestSnapshot);
+      lastHistoryAt = 0;
+      await saveHistory(latestSnapshot);
+      setAutoState("success", "Party, equipamentos, Hunts e análise atualizados agora.");
+    } catch (error) {
+      setAutoState("error", `Atualização incompleta: ${error.message}`);
+    } finally {
+      button.disabled = false;
+      button.textContent = "↻";
+      button.title = "Atualizar agora";
+      refreshBusy = false;
+    }
+  }
+
   function tick(forceSkillsScan) {
     if (!settings.enabled) return;
     latestSnapshot = readSnapshot();
     render(latestSnapshot);
-    scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
+    if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
 
@@ -688,16 +846,23 @@
 
   host.addEventListener("click", async (event) => {
     const action = event.target.closest("button")?.dataset.action;
-    if (action === "refresh") tick(true);
+    if (action === "refresh") refreshAll();
     if (action === "reload-stage") {
-      stageState.key = null;
-      maybeLoadStage(latestSnapshot?.location).catch(() => {});
+      maybeLoadStage(latestSnapshot?.location, true).catch(() => {});
     }
     if (action === "minimize") {
       settings.minimized = !settings.minimized;
       await ext.storage.local.set({ bjSettings: settings });
       schedule();
     }
+  });
+
+  host.addEventListener("change", async (event) => {
+    if (event.target.id !== "bj-hunt-select") return;
+    settings.huntName = event.target.value || "Cobras";
+    await ext.storage.local.set({ bjSettings: settings });
+    renderAutomationStatus();
+    setAutoState("success", `Após o treino, a party voltará para ${settings.huntName}.`);
   });
 
   function enableDrag() {
@@ -721,10 +886,12 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null }).then(({ bjSettings, bjProfiles }) => {
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"] }).then(({ bjSettings, bjProfiles, bjHuntOptions }) => {
     settings = { ...defaults, ...bjSettings };
     profiles = { ...profiles, ...(bjProfiles || {}) };
+    huntOptions = Array.isArray(bjHuntOptions) && bjHuntOptions.length ? bjHuntOptions : ["Cobras"];
     schedule();
+    setTimeout(() => scanHuntOptions(false).catch(() => {}), 1500);
   });
 
   ext.storage.onChanged.addListener((changes, area) => {
@@ -732,12 +899,16 @@
       settings = { ...defaults, ...changes.bjSettings.newValue };
       schedule();
     }
+    if (area === "local" && changes.bjHuntOptions) {
+      huntOptions = changes.bjHuntOptions.newValue || ["Cobras"];
+      renderHuntOptions();
+    }
   });
 
   const gameRoot = document.querySelector("#app");
   if (gameRoot) {
     new MutationObserver(() => {
-      if (!skillsScanBusy) lastGameMutationAt = Date.now();
+      if (!skillsScanBusy && !huntScanBusy) lastGameMutationAt = Date.now();
     }).observe(gameRoot, {
       subtree: true, childList: true, characterData: true, attributes: true
     });

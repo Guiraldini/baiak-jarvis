@@ -331,6 +331,49 @@
     };
   }
 
+  function buildBalanceAdvice(stage, characters) {
+    if (!stage) return { speed: [], survival: [] };
+    const members = Array.isArray(characters) ? characters.filter(Boolean) : [];
+    const focus = stage.focus || "";
+    const protectionText = focus.split(/\b(?:dano|damage|ataque|attack)\b/i)[0];
+    const damageMatch = focus.match(/\b(?:dano|damage|ataque|attack)\b([\s\S]*)/i);
+    const requiredProtection = elementMentions(protectionText);
+    const suggestedDamage = elementMentions(damageMatch ? damageMatch[1] : "");
+    const labels = { physical: "Físico", earth: "Terra", death: "Morte", fire: "Fogo", ice: "Gelo", energy: "Energia", holy: "Sagrado" };
+    const risk = normalizeLookup(stage.risk || "");
+    const speed = [];
+    const survival = [];
+
+    if (/resistencia fisic/.test(risk)) speed.push("A fase possui resistência física; o Knight perde ritmo se depender apenas do dano físico.");
+    if (suggestedDamage.length) speed.push(`Priorize dano ${suggestedDamage.map((item) => labels[item]).join(" ou ")}, indicado para esta fase.`);
+
+    for (const member of members) {
+      const totalSkill = Number.isFinite(member.skillLevel) ? member.skillLevel + (Number(member.skillBonus) || 0) : null;
+      const bonuses = Array.isArray(member.bonusEntries) ? member.bonusEntries : [];
+      const bonus = (name) => bonuses.find((item) => normalizeLookup(item.label) === name)?.value || null;
+      const offenseParts = [];
+      if (totalSkill != null) offenseParts.push(`${member.skillType || "Skill"} ${totalSkill} total`);
+      if (bonus("chance de critico")) offenseParts.push(`crítico ${bonus("chance de critico")}`);
+      if (bonus("velocidade de ataque")) offenseParts.push(`velocidade ${bonus("velocidade de ataque")}`);
+      if (offenseParts.length) speed.push(`${member.name}: ${offenseParts.join(" · ")}.`);
+
+      const protections = member.protections || {};
+      const candidates = (requiredProtection.length ? requiredProtection : Object.keys(protections)).map((element) => ({
+        element,
+        value: Number.isFinite(protections[element]) ? protections[element] : null
+      })).sort((a, b) => (a.value == null ? -Infinity : a.value) - (b.value == null ? -Infinity : b.value));
+      const weakest = candidates[0];
+      if (weakest) {
+        const current = weakest.value == null ? "sem bônus detectado" : `${weakest.value}%`;
+        survival.push(`${member.name}: menor proteção necessária é ${labels[weakest.element] || weakest.element} (${current}); priorize esse elemento para reduzir o risco.`);
+      }
+    }
+
+    if (!speed.length) speed.push("Aumente a skill principal, crítico e velocidade de ataque dos causadores de dano.");
+    if (!survival.length) survival.push("Não há dados suficientes de proteção; atualize a leitura dos equipamentos antes de comparar a sobrevivência.");
+    return { speed: speed.slice(0, 5), survival: survival.slice(0, 4), requiredProtection, suggestedDamage };
+  }
+
   function findPartyKnight(snapshot, profiles) {
     const characters = snapshot && Array.isArray(snapshot.characters) ? snapshot.characters : [];
     const candidates = characters
@@ -450,6 +493,7 @@
     parseVitalBar,
     parseSnapshot,
     compareKnightToStage,
+    buildBalanceAdvice,
     findPartyKnight,
     automationDecision,
     normalizeLookup,

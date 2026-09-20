@@ -27,8 +27,18 @@
     setTimeout(() => { status.textContent = "Configurações salvas automaticamente."; }, 1300);
   }
 
+  function populateHunts(names, selected) {
+    const options = [...new Set([selected || "Cobras", ...(Array.isArray(names) ? names : [])].filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    huntName.innerHTML = options.map((name) => {
+      const escaped = String(name).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char]);
+      return `<option value="${escaped}">${escaped}</option>`;
+    }).join("");
+    huntName.value = selected || "Cobras";
+  }
+
   async function load() {
-    const { bjSettings } = await ext.storage.local.get({ bjSettings: defaults });
+    const { bjSettings, bjHuntOptions } = await ext.storage.local.get({ bjSettings: defaults, bjHuntOptions: ["Cobras"] });
     const settings = { ...defaults, ...bjSettings };
     enabled.checked = settings.enabled;
     objective.value = settings.objective;
@@ -37,7 +47,7 @@
     trainingDuration.value = String(settings.trainingDurationMinutes);
     automationEnabled.checked = settings.automationEnabled;
     autoReload.checked = settings.autoReload;
-    huntName.value = settings.huntName || "Cobras";
+    populateHunts(bjHuntOptions, settings.huntName || "Cobras");
   }
 
   async function save() {
@@ -67,6 +77,9 @@
   automationEnabled.addEventListener("change", save);
   autoReload.addEventListener("change", save);
   huntName.addEventListener("change", save);
+  ext.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.bjHuntOptions) populateHunts(changes.bjHuntOptions.newValue, huntName.value);
+  });
   document.querySelector("#clear").addEventListener("click", async () => {
     await ext.storage.local.remove(["bjHistory", "bjLatest"]);
     flash("Histórico removido.");
