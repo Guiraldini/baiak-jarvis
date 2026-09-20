@@ -177,14 +177,24 @@
 #baiak-jarvis .bj-comparison-note { margin-bottom: 6px; padding: 7px 9px; color: #d8bd79; background: rgba(231,184,78,.08); }
 #baiak-jarvis .bj-comparison-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 #baiak-jarvis .bj-comparison-list article { padding: 8px 9px; background: var(--bj-panel); border: 1px solid rgba(255,255,255,.055); border-radius: 7px; }
+#baiak-jarvis .bj-comparison-list .bj-hunt-card { cursor: pointer; transition: border-color .16s ease, background .16s ease; }
+#baiak-jarvis .bj-comparison-list .bj-hunt-card:hover, #baiak-jarvis .bj-comparison-list .bj-hunt-card:focus-visible { background: rgba(255,255,255,.075); border-color: rgba(101,167,255,.42); outline: none; }
+#baiak-jarvis .bj-comparison-list .bj-hunt-card.bj-expanded { grid-column: 1 / -1; border-color: rgba(101,167,255,.5); }
 #baiak-jarvis .bj-comparison-list article.bj-best-hunt { border-color: rgba(67,209,124,.34); }
 #baiak-jarvis .bj-comparison-head { display: flex; justify-content: space-between; gap: 8px; }
 #baiak-jarvis .bj-comparison-head strong { font-size: 11px; }
 #baiak-jarvis .bj-comparison-head b { color: #8ee3ae; font-size: 9px; }
+#baiak-jarvis .bj-comparison-head > div { display: flex; align-items: center; gap: 7px; }
+#baiak-jarvis .bj-comparison-head i { display: grid; place-items: center; width: 17px; height: 17px; color: #b7cff0; background: rgba(101,167,255,.1); border-radius: 4px; font-size: 12px; font-style: normal; }
 #baiak-jarvis .bj-rate-bar { height: 5px; margin: 6px 0; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden; }
 #baiak-jarvis .bj-rate-bar i { display: block; height: 100%; background: linear-gradient(90deg, #438fd1, #43d17c); border-radius: inherit; }
 #baiak-jarvis .bj-comparison-list small { color: var(--bj-muted); font-size: 8.5px; }
+#baiak-jarvis .bj-expand-hint { display: block; margin-top: 6px; color: #708196; font-size: 8px; }
+#baiak-jarvis .bj-card-details { animation: bj-card-open .16s ease-out; }
+@keyframes bj-card-open { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 #baiak-jarvis .bj-versus-list { margin-top: 7px; }
+#baiak-jarvis .bj-expanded .bj-versus-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 6px; }
+#baiak-jarvis .bj-expanded .bj-versus-list > b { grid-column: 1 / -1; }
 #baiak-jarvis .bj-versus-list > b { color: #8ea0b4; font-size: 7px; letter-spacing: .06em; }
 #baiak-jarvis .bj-versus { display: grid; grid-template-columns: minmax(90px, 1fr) auto; gap: 2px 8px; margin-top: 4px; padding: 6px 7px; background: rgba(0,0,0,.16); border-left: 2px solid #65a7ff; border-radius: 4px; }
 #baiak-jarvis .bj-versus > span { color: #aeb9c6; font-size: 8.5px; }
@@ -214,6 +224,8 @@
   #baiak-jarvis #bj-optimizer-frame { height: calc(100vh - 190px); min-height: 360px; }
   #baiak-jarvis .bj-hunts-view { height: auto; max-height: calc(100vh - 190px); }
   #baiak-jarvis .bj-hunt-summary, #baiak-jarvis .bj-comparison-list { grid-template-columns: 1fr; }
+  #baiak-jarvis .bj-expanded .bj-versus-list { grid-template-columns: 1fr; }
+  #baiak-jarvis .bj-expanded .bj-versus-list > b { grid-column: auto; }
   #baiak-jarvis .bj-run-table { overflow-x: auto; }
   #baiak-jarvis .bj-run-row { min-width: 530px; grid-template-columns: minmax(90px, 1.2fr) 52px 92px 72px 72px 22px; gap: 4px; padding: 6px; }
 }

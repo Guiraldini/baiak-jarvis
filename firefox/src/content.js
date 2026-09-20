@@ -37,6 +37,7 @@
   let huntRuns = [];
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
+  let selectedHuntKey = null;
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -860,15 +861,18 @@
     } else {
       const maxRate = Math.max(...summaries.map((item) => item.xpPerHour), 1);
       comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => {
-        return `<article class="${index === 0 ? "bj-best-hunt" : ""}">
-          <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><b>Média ${formatNumber(Math.round(item.xpPerHour))} XP/h</b></div>
+        const key = core.normalizeLookup(item.huntName);
+        const expanded = selectedHuntKey === key;
+        return `<article class="bj-hunt-card ${index === 0 ? "bj-best-hunt" : ""} ${expanded ? "bj-expanded" : ""}" data-hunt-card="${escapeHtml(key)}" role="button" tabindex="0" aria-expanded="${expanded}">
+          <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><div><b>Média ${formatNumber(Math.round(item.xpPerHour))} XP/h</b><i>${expanded ? "−" : "+"}</i></div></div>
           <div class="bj-rate-bar"><i style="width:${Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1)}%"></i></div>
           <small>Média recalculada com ${item.runs} ${item.runs === 1 ? "wave" : "waves"} · ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave</small>
-          ${renderHuntComparisons(item, summaries)}
-          <div class="bj-hunt-metrics">
-            <span><b>Loot médio</b>${Number.isFinite(item.averageLoot) ? formatNumber(Math.round(item.averageLoot)) : "—"} gold</span>
-            <span><b>Lucro médio</b>${Number.isFinite(item.averageBalance) ? formatNumber(Math.round(item.averageBalance)) : "—"} gold</span>
-          </div>
+          ${expanded ? `<div class="bj-card-details">${renderHuntComparisons(item, summaries)}
+            <div class="bj-hunt-metrics">
+              <span><b>Loot médio</b>${Number.isFinite(item.averageLoot) ? formatNumber(Math.round(item.averageLoot)) : "—"} gold</span>
+              <span><b>Lucro médio</b>${Number.isFinite(item.averageBalance) ? formatNumber(Math.round(item.averageBalance)) : "—"} gold</span>
+            </div>
+          </div>` : '<span class="bj-expand-hint">Clique para abrir as comparações</span>'}
         </article>`;
       }).join("")}</div>`;
     }
@@ -1107,6 +1111,12 @@
   }
 
   host.addEventListener("click", async (event) => {
+    const huntCard = event.target.closest("[data-hunt-card]");
+    if (huntCard) {
+      selectedHuntKey = selectedHuntKey === huntCard.dataset.huntCard ? null : huntCard.dataset.huntCard;
+      renderHuntHistory();
+      return;
+    }
     const action = event.target.closest("button")?.dataset.action;
     if (action === "refresh") refreshAll();
     if (action === "view-dashboard") await switchView("dashboard", true);
@@ -1126,6 +1136,15 @@
       await ext.storage.local.set({ bjSettings: settings });
       schedule();
     }
+  });
+
+  host.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const huntCard = event.target.closest("[data-hunt-card]");
+    if (!huntCard) return;
+    event.preventDefault();
+    selectedHuntKey = selectedHuntKey === huntCard.dataset.huntCard ? null : huntCard.dataset.huntCard;
+    renderHuntHistory();
   });
 
   host.addEventListener("change", async (event) => {
