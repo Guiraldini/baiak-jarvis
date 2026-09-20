@@ -88,7 +88,7 @@
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-optimizer">
         <div class="bj-optimizer-bar"><div><strong>OTIMIZADOR DE BUILD</strong><small>Monte e compare a árvore da sua vocação.</small></div><a href="https://baiakidle-build-optimizer.pages.dev/build-optimizer/" target="_blank" rel="noreferrer">Abrir separado ↗</a></div>
-        <iframe id="bj-optimizer-frame" title="Baiak Idle — Otimizador de Build" data-src="https://baiakidle-build-optimizer.pages.dev/build-optimizer/" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allow="clipboard-write"></iframe>
+        <iframe id="bj-optimizer-frame" title="Baiak Idle — Otimizador de Build" data-src="https://baiakidle-build-optimizer.pages.dev/build-optimizer/" allow="clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </section>
       <footer>Jarvis ${extensionVersion} AUTO · execução local</footer>
     </div>`;

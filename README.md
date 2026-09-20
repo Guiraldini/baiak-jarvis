@@ -2,7 +2,7 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
-## Versão 0.6.0
+## Versão 0.6.1
 
 - troca para **Treino online** ao chegar em `6:43` de stamina, aproximadamente 16%;
 - troca para **Cobras** ao chegar em `22:43`, aproximadamente 54%;
@@ -29,12 +29,13 @@ Extensão local para acompanhar a party do Baiak Idle, analisar a hunt seleciona
 - adiciona navegação por abas entre **Painel** e **Otimizador**;
 - incorpora o Baiak Idle Build Optimizer diretamente no Jarvis;
 - carrega o otimizador somente quando a aba é aberta e mantém um link para abri-lo separadamente.
+- remove o sandbox redundante do iframe para eliminar o aviso de segurança do Chrome.
 
 As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.6.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.6.1.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -45,7 +46,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.6.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.6.1.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -65,4 +66,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.6.0 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.6.1 AUTO · execução local`.
