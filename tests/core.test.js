@@ -63,6 +63,22 @@ assert.deepEqual(core.parseVitalBar("5.631/5.631"), { current: 5631, max: 5631 }
 assert.deepEqual(core.parseVitalBar("1.567 / 1.700"), { current: 1567, max: 1700 });
 assert.equal(core.parseVitalBar("sem leitura"), null);
 assert.equal(core.usage({ used: 6, total: 12 }), 0.5);
+assert.equal(core.elapsedToSeconds("03:28"), 208);
+assert.equal(core.elapsedToSeconds("1:02:03"), 3723);
+assert.equal(core.elapsedToSeconds("sem tempo"), null);
+assert.equal(core.elapsedToSeconds("03:70"), null);
+
+const huntSummary = core.summarizeHuntRuns([
+  { huntName: "Cobras", durationSeconds: 600, xpGain: 2000000 },
+  { huntName: "Cobras", durationSeconds: 660, xpGain: 2100000 },
+  { huntName: "Dragon Lair", durationSeconds: 480, xpGain: 1800000 },
+  { huntName: "Ignorada", durationSeconds: 0, xpGain: null }
+]);
+assert.equal(huntSummary.length, 2);
+assert.equal(huntSummary[0].huntName, "Dragon Lair");
+assert.equal(huntSummary[0].xpPerHour, 13500000);
+assert.equal(huntSummary.find((item) => item.huntName === "Cobras").runs, 2);
+assert.equal(Math.round(huntSummary.find((item) => item.huntName === "Cobras").averageDurationSeconds), 630);
 
 const vipTrainingPlan = core.staminaPlan(snapshot, { vipActive: true });
 assert.equal(vipTrainingPlan.phase, "train");

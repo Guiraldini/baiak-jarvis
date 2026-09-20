@@ -34,6 +34,9 @@
   let huntOptions = ["Cobras"];
   let huntScanBusy = false;
   let refreshBusy = false;
+  let huntRuns = [];
+  let huntTracker = null;
+  let huntMonitorMessage = "Aguardando uma hunt começar.";
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -48,6 +51,7 @@
     <div class="bj-body">
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
+        <button type="button" data-action="view-hunts" aria-selected="false">Hunts</button>
         <button type="button" data-action="view-optimizer" aria-selected="false">Otimizador</button>
       </nav>
       <section class="bj-view" id="bj-view-dashboard">
@@ -84,6 +88,15 @@
               <div id="bj-stage-content"></div>
             </details>
           </div>
+        </div>
+      </section>
+      <section class="bj-view bj-view-hidden" id="bj-view-hunts">
+        <div class="bj-hunts-view">
+          <div class="bj-hunts-heading"><div><strong>HISTÓRICO DE HUNTS</strong><small>Uma medição vai da wave 1 até a queda do boss.</small></div><span id="bj-hunt-run-count">0 waves</span></div>
+          <section class="bj-live-run" id="bj-live-run"></section>
+          <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
+          <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
+          <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-optimizer">
@@ -339,6 +352,8 @@
     renderAutomationStatus();
     renderHuntOptions();
     renderProfiles(snapshot);
+    monitorHuntRun(snapshot);
+    renderHuntHistory();
 
     const recommendations = core.buildRecommendations(snapshot, settings.objective);
     host.querySelector("#bj-recommendations").innerHTML = recommendations.map((item) => `
@@ -379,10 +394,12 @@
   }
 
   async function switchView(view, persist = false) {
-    const selected = view === "optimizer" ? "optimizer" : "dashboard";
+    const selected = ["dashboard", "hunts", "optimizer"].includes(view) ? view : "dashboard";
     host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
+    host.querySelector("#bj-view-hunts").classList.toggle("bj-view-hidden", selected !== "hunts");
     host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
     host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
+    host.querySelector('[data-action="view-hunts"]').setAttribute("aria-selected", String(selected === "hunts"));
     host.querySelector('[data-action="view-optimizer"]').setAttribute("aria-selected", String(selected === "optimizer"));
     if (selected === "optimizer") {
       const frame = host.querySelector("#bj-optimizer-frame");
@@ -654,6 +671,161 @@
     return Boolean(normalized) && !/^(treino online|cidade|hunts?|chefes?|arena)$/.test(normalized);
   }
 
+  function readAnalyzerNumber(selector) {
+    return core.numberFromPtBr(document.querySelector(selector)?.textContent);
+  }
+
+  function readHuntTelemetry(snapshot) {
+    const huntName = core.clean(snapshot?.location).replace(/▾/g, "");
+    const timerText = core.clean(document.querySelector("#run-timer")?.textContent);
+    const durationSeconds = core.elapsedToSeconds(timerText);
+    const dots = [...document.querySelectorAll("#wave-dots > i")];
+    const currentIndex = dots.findIndex((dot) => dot.classList.contains("now"));
+    return {
+      huntName,
+      durationSeconds,
+      timerText,
+      waveNumber: currentIndex >= 0 ? currentIndex + 1 : null,
+      waveCount: dots.length || null,
+      xpGain: readAnalyzerNumber("#an-raw"),
+      kills: readAnalyzerNumber("#an-kills"),
+      loot: readAnalyzerNumber("#an-loot"),
+      supplies: readAnalyzerNumber("#an-supplies"),
+      balance: readAnalyzerNumber("#an-balance"),
+      capturedAt: snapshot?.capturedAt || Date.now(),
+      valid: isHuntLocation(huntName) && Number.isFinite(durationSeconds) && Number.isFinite(readAnalyzerNumber("#an-raw"))
+    };
+  }
+
+  function beginHuntTracker(telemetry, forceEligible = false) {
+    const eligible = forceEligible || (telemetry.waveNumber === 1 && telemetry.durationSeconds <= 5);
+    huntTracker = {
+      huntName: telemetry.huntName,
+      startedAt: telemetry.capturedAt - telemetry.durationSeconds * 1000,
+      startXp: telemetry.xpGain,
+      startKills: telemetry.kills,
+      startLoot: telemetry.loot,
+      startSupplies: telemetry.supplies,
+      startBalance: telemetry.balance,
+      lastXp: telemetry.xpGain,
+      lastDurationSeconds: telemetry.durationSeconds,
+      lastWaveNumber: telemetry.waveNumber,
+      maxDurationSeconds: telemetry.durationSeconds,
+      hadBossWave: telemetry.waveCount > 0 && telemetry.waveNumber === telemetry.waveCount,
+      eligible,
+      completed: false
+    };
+    huntMonitorMessage = eligible
+      ? `${telemetry.huntName}: wave ${telemetry.waveNumber || "—"}/${telemetry.waveCount || "—"} em andamento.`
+      : `${telemetry.huntName}: medição começou no meio da fase; o registro inicia na próxima wave 1.`;
+  }
+
+  function metricDelta(endValue, startValue) {
+    return Number.isFinite(endValue) && Number.isFinite(startValue) ? Math.max(0, endValue - startValue) : null;
+  }
+
+  function saveCompletedHunt(telemetry, durationSeconds) {
+    if (!huntTracker?.eligible || huntTracker.completed || durationSeconds < 10) return;
+    const xpGain = metricDelta(telemetry.xpGain, huntTracker.startXp);
+    if (!Number.isFinite(xpGain)) return;
+    huntTracker.completed = true;
+    const completedAt = telemetry.capturedAt;
+    const record = {
+      id: `${completedAt}-${core.normalizeLookup(huntTracker.huntName).replace(/\s+/g, "-")}`,
+      huntName: huntTracker.huntName,
+      startedAt: huntTracker.startedAt,
+      completedAt,
+      durationSeconds,
+      xpGain,
+      kills: metricDelta(telemetry.kills, huntTracker.startKills),
+      loot: metricDelta(telemetry.loot, huntTracker.startLoot),
+      supplies: metricDelta(telemetry.supplies, huntTracker.startSupplies),
+      balance: metricDelta(telemetry.balance, huntTracker.startBalance)
+    };
+    huntRuns = [...huntRuns, record].slice(-200);
+    huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
+    ext.storage.local.set({ bjHuntRuns: huntRuns }).catch(() => {});
+  }
+
+  function monitorHuntRun(snapshot) {
+    const telemetry = readHuntTelemetry(snapshot);
+    if (!telemetry.valid) {
+      huntTracker = null;
+      huntMonitorMessage = "Aguardando uma hunt começar.";
+      return;
+    }
+    if (!huntTracker || core.normalizeLookup(huntTracker.huntName) !== core.normalizeLookup(telemetry.huntName)) {
+      beginHuntTracker(telemetry);
+      return;
+    }
+    if (telemetry.xpGain < huntTracker.lastXp) {
+      beginHuntTracker(telemetry);
+      huntTracker.eligible = false;
+      huntMonitorMessage = "O Hunt Analyzer foi zerado; a medição recomeça na próxima wave 1.";
+      return;
+    }
+
+    const timerReset = telemetry.durationSeconds + 3 < huntTracker.lastDurationSeconds
+      && (huntTracker.hadBossWave || latestSnapshot?.loopEnabled === true || (telemetry.waveNumber && huntTracker.lastWaveNumber && telemetry.waveNumber < huntTracker.lastWaveNumber));
+    const bossFinished = huntTracker.hadBossWave && telemetry.waveNumber == null && !huntTracker.completed;
+    if (timerReset) {
+      saveCompletedHunt(telemetry, huntTracker.maxDurationSeconds);
+      beginHuntTracker(telemetry);
+      return;
+    }
+    if (bossFinished) saveCompletedHunt(telemetry, Math.max(telemetry.durationSeconds, huntTracker.maxDurationSeconds));
+
+    huntTracker.lastXp = telemetry.xpGain;
+    huntTracker.lastDurationSeconds = telemetry.durationSeconds;
+    huntTracker.lastWaveNumber = telemetry.waveNumber;
+    huntTracker.maxDurationSeconds = Math.max(huntTracker.maxDurationSeconds, telemetry.durationSeconds);
+    huntTracker.hadBossWave = huntTracker.hadBossWave || (telemetry.waveCount > 0 && telemetry.waveNumber === telemetry.waveCount);
+    if (!huntTracker.completed && huntTracker.eligible) {
+      huntMonitorMessage = `${telemetry.huntName}: wave ${telemetry.waveNumber || "boss"}/${telemetry.waveCount || "—"} · ${telemetry.timerText} · ${formatNumber(metricDelta(telemetry.xpGain, huntTracker.startXp))} XP até agora.`;
+    }
+  }
+
+  function formatElapsed(seconds) {
+    if (!Number.isFinite(seconds)) return "—";
+    const total = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}` : `${minutes}:${String(secs).padStart(2, "0")}`;
+  }
+
+  function runXpPerHour(run) {
+    return run.durationSeconds > 0 ? run.xpGain * 3600 / run.durationSeconds : 0;
+  }
+
+  function renderHuntHistory() {
+    const summaries = core.summarizeHuntRuns(huntRuns);
+    const best = summaries[0] || null;
+    host.querySelector("#bj-hunt-run-count").textContent = `${huntRuns.length} ${huntRuns.length === 1 ? "wave" : "waves"}`;
+    host.querySelector("#bj-live-run").innerHTML = `<span class="bj-live-dot"></span><div><b>MEDIÇÃO EM TEMPO REAL</b><small>${escapeHtml(huntMonitorMessage)}</small></div>`;
+    host.querySelector("#bj-hunt-summary").innerHTML = huntRuns.length ? `
+      <article><small>Melhor rendimento</small><strong>${escapeHtml(best.huntName)}</strong><span>${formatNumber(Math.round(best.xpPerHour))} XP/h</span></article>
+      <article><small>Hunts comparadas</small><strong>${summaries.length}</strong><span>${huntRuns.length} waves completas</span></article>
+      <article><small>XP registrado</small><strong>${formatNumber(huntRuns.reduce((sum, run) => sum + run.xpGain, 0))}</strong><span>somando todas as waves</span></article>` : "";
+
+    const comparison = host.querySelector("#bj-hunt-comparison");
+    if (!summaries.length) {
+      comparison.innerHTML = `<div class="bj-empty-state">Ainda não há wave completa. Deixe a hunt rodar da wave 1 até o boss.</div>`;
+    } else {
+      const maxRate = Math.max(...summaries.map((item) => item.xpPerHour), 1);
+      comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => `
+        <article class="${index === 0 ? "bj-best-hunt" : ""}">
+          <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><b>${formatNumber(Math.round(item.xpPerHour))} XP/h</b></div>
+          <div class="bj-rate-bar"><i style="width:${Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1)}%"></i></div>
+          <small>${item.runs} ${item.runs === 1 ? "wave" : "waves"} · média ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave</small>
+        </article>`).join("")}</div>`;
+    }
+
+    const recent = [...huntRuns].sort((a, b) => b.completedAt - a.completedAt).slice(0, 20);
+    host.querySelector("#bj-run-history").innerHTML = recent.length ? `<div class="bj-run-table"><div class="bj-run-row bj-run-table-head"><span>Hunt</span><span>Tempo</span><span>XP</span><span>XP/h</span></div>${recent.map((run) => `
+      <div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span>${formatNumber(run.xpGain)}</span><span>${formatNumber(Math.round(runXpPerHour(run)))}</span></div>`).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
+  }
+
   function lookupKey(value) {
     return core.normalizeLookup(value).split(" ").map((word) => word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word).join(" ");
   }
@@ -880,6 +1052,7 @@
     const action = event.target.closest("button")?.dataset.action;
     if (action === "refresh") refreshAll();
     if (action === "view-dashboard") await switchView("dashboard", true);
+    if (action === "view-hunts") await switchView("hunts", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
     if (action === "reload-stage") {
       maybeLoadStage(latestSnapshot?.location, true).catch(() => {});
@@ -920,10 +1093,11 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"] }).then(({ bjSettings, bjProfiles, bjHuntOptions }) => {
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [] }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns }) => {
     settings = { ...defaults, ...bjSettings };
     profiles = { ...profiles, ...(bjProfiles || {}) };
     huntOptions = Array.isArray(bjHuntOptions) && bjHuntOptions.length ? bjHuntOptions : ["Cobras"];
+    huntRuns = Array.isArray(bjHuntRuns) ? bjHuntRuns : [];
     schedule();
     setTimeout(() => scanHuntOptions(false).catch(() => {}), 1500);
   });
@@ -936,6 +1110,10 @@
     if (area === "local" && changes.bjHuntOptions) {
       huntOptions = changes.bjHuntOptions.newValue || ["Cobras"];
       renderHuntOptions();
+    }
+    if (area === "local" && changes.bjHuntRuns) {
+      huntRuns = Array.isArray(changes.bjHuntRuns.newValue) ? changes.bjHuntRuns.newValue : [];
+      renderHuntHistory();
     }
   });
 

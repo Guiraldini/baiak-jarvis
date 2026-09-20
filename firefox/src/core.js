@@ -154,6 +154,39 @@
     return slots && slots.total ? slots.used / slots.total : null;
   }
 
+  function elapsedToSeconds(value) {
+    const parts = String(value || "").trim().split(":").map(Number);
+    if (parts.length < 2 || parts.length > 3 || parts.some((part) => !Number.isFinite(part) || part < 0)) return null;
+    if (parts.at(-1) >= 60 || (parts.length === 3 && parts[1] >= 60)) return null;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+
+  function summarizeHuntRuns(runs) {
+    const groups = new Map();
+    for (const run of Array.isArray(runs) ? runs : []) {
+      const durationSeconds = Number(run && run.durationSeconds);
+      const xpGain = Number(run && run.xpGain);
+      const huntName = clean(run && run.huntName);
+      if (!huntName || run?.durationSeconds == null || run?.xpGain == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(xpGain) || xpGain < 0) continue;
+      const key = normalizeLookup(huntName);
+      const current = groups.get(key) || { huntName, runs: 0, totalDurationSeconds: 0, totalXp: 0, bestXpPerHour: 0 };
+      const xpPerHour = xpGain * 3600 / durationSeconds;
+      current.huntName = huntName;
+      current.runs += 1;
+      current.totalDurationSeconds += durationSeconds;
+      current.totalXp += xpGain;
+      current.bestXpPerHour = Math.max(current.bestXpPerHour, xpPerHour);
+      groups.set(key, current);
+    }
+    return [...groups.values()].map((group) => ({
+      ...group,
+      averageDurationSeconds: group.totalDurationSeconds / group.runs,
+      averageXp: group.totalXp / group.runs,
+      xpPerHour: group.totalXp * 3600 / group.totalDurationSeconds
+    })).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
+  }
+
   function durationToMinutes(value) {
     const match = String(value || "").match(/^(\d{1,3}):(\d{2})$/);
     if (!match) return null;
@@ -486,6 +519,7 @@
     clean,
     compactHistory,
     durationToMinutes,
+    elapsedToSeconds,
     elementMentions,
     formatMinutes,
     numberFromPtBr,
@@ -498,6 +532,7 @@
     automationDecision,
     normalizeLookup,
     staminaPlan,
+    summarizeHuntRuns,
     usage
   };
 });
