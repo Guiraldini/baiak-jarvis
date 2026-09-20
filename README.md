@@ -2,7 +2,7 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
-## Versão 0.7.0
+## Versão 0.7.1
 
 - troca para **Treino online** ao chegar em `6:43` de stamina, aproximadamente 16%;
 - troca para **Cobras** ao chegar em `22:43`, aproximadamente 54%;
@@ -35,12 +35,13 @@ Extensão local para acompanhar a party do Baiak Idle, analisar a hunt seleciona
 - guarda localmente as 200 waves mais recentes e exibe as últimas 20 no painel;
 - compara as hunts pela média de tempo, XP por wave e XP por hora;
 - destaca automaticamente a hunt com o melhor rendimento medido.
+- encerra silenciosamente o monitor antigo quando a extensão é recarregada, evitando o erro `Extension context invalidated`.
 
 As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.7.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.7.1.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -51,7 +52,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.7.0.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.7.1.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -71,4 +72,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.7.0 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.7.1 AUTO · execução local`.

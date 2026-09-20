@@ -1025,14 +1025,20 @@
   }
 
   function sendHeartbeat() {
-    ext.runtime.sendMessage({
-      type: "bj:heartbeat",
-      online: navigator.onLine,
-      errorDetected: gameFailureDetected(),
-      stalled: !document.hidden && Date.now() - lastGameMutationAt > 3 * 60 * 1000,
-      location: latestSnapshot?.location || null,
-      stamina: latestSnapshot?.stamina?.time || null
-    }).catch(() => {});
+    try {
+      if (!ext.runtime?.id) return;
+      const request = ext.runtime.sendMessage({
+        type: "bj:heartbeat",
+        online: navigator.onLine,
+        errorDetected: gameFailureDetected(),
+        stalled: !document.hidden && Date.now() - lastGameMutationAt > 3 * 60 * 1000,
+        location: latestSnapshot?.location || null,
+        stamina: latestSnapshot?.stamina?.time || null
+      });
+      if (request && typeof request.catch === "function") request.catch(() => {});
+    } catch (_error) {
+      if (timer) clearInterval(timer);
+    }
   }
 
   function schedule() {
