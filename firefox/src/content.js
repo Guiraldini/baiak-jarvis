@@ -15,7 +15,8 @@
     trainingDurationMinutes: 120,
     automationEnabled: true,
     autoReload: true,
-    huntName: "Cobras"
+    huntName: "Cobras",
+    activeView: "dashboard"
   };
   let settings = { ...defaults };
   let profiles = {};
@@ -38,41 +39,57 @@
   host.id = "baiak-jarvis";
   host.innerHTML = `
     <header class="bj-header">
-      <div><strong><span class="bj-pulse"></span> JARVIS</strong><small>copiloto local</small></div>
+      <div><strong><span class="bj-pulse"></span> JARVIS</strong><small>stamina · party · builds</small></div>
       <div class="bj-actions">
         <button type="button" data-action="refresh" title="Atualizar agora">↻</button>
         <button type="button" data-action="minimize" title="Minimizar">−</button>
       </div>
     </header>
     <div class="bj-body">
-      <div class="bj-context"><span id="bj-location">Lendo o jogo…</span><span id="bj-clock">--:--</span></div>
-      <section class="bj-cycle" id="bj-cycle">
-        <div class="bj-cycle-top"><span id="bj-cycle-action">CALCULANDO CICLO</span><span id="bj-rate">—</span></div>
-        <strong id="bj-countdown">—</strong>
-        <span id="bj-cycle-detail">Lendo a stamina atual…</span>
-        <div class="bj-progress"><i id="bj-progress-fill"></i><b id="bj-floor-marker"></b><b class="bj-ceiling" id="bj-ceiling-marker"></b></div>
-        <div class="bj-scale"><span>0h</span><span id="bj-floor-label">16% · treinar</span><span id="bj-ceiling-label">54% · caçar</span></div>
+      <nav class="bj-tabs" aria-label="Áreas do Jarvis">
+        <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
+        <button type="button" data-action="view-optimizer" aria-selected="false">Otimizador</button>
+      </nav>
+      <section class="bj-view" id="bj-view-dashboard">
+        <div class="bj-columns">
+          <div class="bj-column bj-column-main">
+            <div class="bj-context"><span id="bj-location">Lendo o jogo…</span><span id="bj-clock">--:--</span></div>
+            <section class="bj-cycle" id="bj-cycle">
+              <div class="bj-cycle-top"><span id="bj-cycle-action">CALCULANDO CICLO</span><span id="bj-rate">—</span></div>
+              <strong id="bj-countdown">—</strong>
+              <span id="bj-cycle-detail">Lendo a stamina atual…</span>
+              <div class="bj-progress"><i id="bj-progress-fill"></i><b id="bj-floor-marker"></b><b class="bj-ceiling" id="bj-ceiling-marker"></b></div>
+              <div class="bj-scale"><span>0h</span><span id="bj-floor-label">16% · treinar</span><span id="bj-ceiling-label">54% · caçar</span></div>
+            </section>
+            <div class="bj-grid">
+              <div class="bj-stat"><small>Stamina</small><strong id="bj-stamina">—</strong></div>
+              <div class="bj-stat"><small>Mochila</small><strong id="bj-backpack">—</strong></div>
+              <div class="bj-stat"><small>Party</small><strong id="bj-party">—</strong></div>
+              <div class="bj-stat"><small>Objetivo</small><strong id="bj-objective">Equilíbrio</strong></div>
+            </div>
+            <section class="bj-auto" id="bj-auto">
+              <div><span class="bj-auto-dot"></span><strong id="bj-auto-title">AUTOMAÇÃO</strong></div>
+              <small id="bj-auto-message">Aguardando leitura da stamina.</small>
+              <label class="bj-hunt-choice"><span>Hunt após o treino</span><select id="bj-hunt-select" title="Hunt automática"></select></label>
+            </section>
+            <section><div class="bj-section-title">RECOMENDAÇÕES</div><div id="bj-recommendations"></div></section>
+          </div>
+          <div class="bj-column bj-column-details">
+            <details class="bj-details" open>
+              <summary>Poder da party</summary>
+              <div id="bj-characters"></div>
+            </details>
+            <details class="bj-stage bj-hidden-section" id="bj-stage">
+              <summary class="bj-section-title">ANÁLISE DA HUNT</summary>
+              <div id="bj-stage-content"></div>
+            </details>
+          </div>
+        </div>
       </section>
-      <div class="bj-grid">
-        <div class="bj-stat"><small>Stamina</small><strong id="bj-stamina">—</strong></div>
-        <div class="bj-stat"><small>Mochila</small><strong id="bj-backpack">—</strong></div>
-        <div class="bj-stat"><small>Party</small><strong id="bj-party">—</strong></div>
-        <div class="bj-stat"><small>Objetivo</small><strong id="bj-objective">Equilíbrio</strong></div>
-      </div>
-      <section class="bj-auto" id="bj-auto">
-        <div><span class="bj-auto-dot"></span><strong id="bj-auto-title">AUTOMAÇÃO</strong></div>
-        <small id="bj-auto-message">Aguardando leitura da stamina.</small>
-        <label class="bj-hunt-choice"><span>Hunt após o treino</span><select id="bj-hunt-select" title="Hunt automática"></select></label>
+      <section class="bj-view bj-view-hidden" id="bj-view-optimizer">
+        <div class="bj-optimizer-bar"><div><strong>OTIMIZADOR DE BUILD</strong><small>Monte e compare a árvore da sua vocação.</small></div><a href="https://baiakidle-build-optimizer.pages.dev/build-optimizer/" target="_blank" rel="noreferrer">Abrir separado ↗</a></div>
+        <iframe id="bj-optimizer-frame" title="Baiak Idle — Otimizador de Build" data-src="https://baiakidle-build-optimizer.pages.dev/build-optimizer/" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads" allow="clipboard-write"></iframe>
       </section>
-      <details class="bj-details" open>
-        <summary>Poder da party</summary>
-        <div id="bj-characters"></div>
-      </details>
-      <details class="bj-stage bj-hidden-section" id="bj-stage">
-        <summary class="bj-section-title">ANÁLISE DA HUNT</summary>
-        <div id="bj-stage-content"></div>
-      </details>
-      <section><div class="bj-section-title">RECOMENDAÇÕES</div><div id="bj-recommendations"></div></section>
       <footer>Jarvis ${extensionVersion} AUTO · execução local</footer>
     </div>`;
   document.documentElement.appendChild(host);
@@ -359,6 +376,20 @@
       select.dataset.signature = signature;
     }
     select.value = selected;
+  }
+
+  async function switchView(view, persist = false) {
+    const selected = view === "optimizer" ? "optimizer" : "dashboard";
+    host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
+    host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
+    host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
+    host.querySelector('[data-action="view-optimizer"]').setAttribute("aria-selected", String(selected === "optimizer"));
+    if (selected === "optimizer") {
+      const frame = host.querySelector("#bj-optimizer-frame");
+      if (!frame.getAttribute("src")) frame.src = frame.dataset.src;
+    }
+    settings.activeView = selected;
+    if (persist) await ext.storage.local.set({ bjSettings: settings });
   }
 
   function delay(ms) {
@@ -839,6 +870,7 @@
     const minimizeButton = host.querySelector('[data-action="minimize"]');
     minimizeButton.textContent = settings.minimized ? "+" : "−";
     minimizeButton.title = settings.minimized ? "Expandir" : "Minimizar";
+    switchView(settings.activeView || "dashboard", false).catch(() => {});
     if (!settings.enabled) return;
     tick();
     timer = setInterval(tick, Math.max(750, Number(settings.intervalMs) || defaults.intervalMs));
@@ -847,6 +879,8 @@
   host.addEventListener("click", async (event) => {
     const action = event.target.closest("button")?.dataset.action;
     if (action === "refresh") refreshAll();
+    if (action === "view-dashboard") await switchView("dashboard", true);
+    if (action === "view-optimizer") await switchView("optimizer", true);
     if (action === "reload-stage") {
       maybeLoadStage(latestSnapshot?.location, true).catch(() => {});
     }
