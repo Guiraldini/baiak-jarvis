@@ -826,6 +826,24 @@
     return `${value >= 0 ? "+" : "−"}${formatNumber(Math.abs(Math.round(value)))}`;
   }
 
+  function renderHuntComparisons(item, summaries) {
+    const references = summaries.filter((candidate) => candidate !== item);
+    if (!references.length) return "";
+    return `<div class="bj-versus-list"><b>COMPARAÇÃO COM TODAS AS HUNTS</b>${references.map((reference) => {
+      const xpPercent = core.relativeDifference(item.xpPerHour, reference.xpPerHour);
+      const xpDifference = item.xpPerHour - reference.xpPerHour;
+      const goldDifference = Number.isFinite(item.averageBalance) && Number.isFinite(reference.averageBalance)
+        ? item.averageBalance - reference.averageBalance
+        : null;
+      const goldPercent = core.relativeDifference(item.averageBalance, reference.averageBalance);
+      return `<div class="bj-versus">
+        <span>vs. <b>${escapeHtml(reference.huntName)}</b></span>
+        <strong class="${xpPercent >= 0 ? "bj-up" : "bj-down"}">${formatSignedPercent(xpPercent)} XP/h</strong>
+        <small>${formatSignedNumber(xpDifference)} XP/h · ${formatSignedNumber(goldDifference)} gold/wave${Number.isFinite(goldPercent) ? ` (${formatSignedPercent(goldPercent)})` : ""}</small>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
   function renderHuntHistory() {
     const summaries = core.summarizeHuntRuns(huntRuns);
     const best = summaries[0] || null;
@@ -842,22 +860,11 @@
     } else {
       const maxRate = Math.max(...summaries.map((item) => item.xpPerHour), 1);
       comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => {
-        const reference = summaries.length > 1 ? (index === 0 ? summaries[1] : summaries[0]) : null;
-        const xpPercent = reference ? core.relativeDifference(item.xpPerHour, reference.xpPerHour) : null;
-        const xpDifference = reference ? item.xpPerHour - reference.xpPerHour : null;
-        const goldDifference = reference && Number.isFinite(item.averageBalance) && Number.isFinite(reference.averageBalance)
-          ? item.averageBalance - reference.averageBalance
-          : null;
-        const goldPercent = reference ? core.relativeDifference(item.averageBalance, reference.averageBalance) : null;
         return `<article class="${index === 0 ? "bj-best-hunt" : ""}">
           <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><b>Média ${formatNumber(Math.round(item.xpPerHour))} XP/h</b></div>
           <div class="bj-rate-bar"><i style="width:${Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1)}%"></i></div>
           <small>Média recalculada com ${item.runs} ${item.runs === 1 ? "wave" : "waves"} · ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave</small>
-          ${reference ? `<div class="bj-versus">
-            <b class="${xpPercent >= 0 ? "bj-up" : "bj-down"}">${formatSignedPercent(xpPercent)} de rendimento de XP</b>
-            <span>comparado com ${escapeHtml(reference.huntName)}</span>
-            <small>Diferença: ${formatSignedNumber(xpDifference)} XP/h · ${formatSignedNumber(goldDifference)} gold/wave${Number.isFinite(goldPercent) ? ` (${formatSignedPercent(goldPercent)})` : ""}</small>
-          </div>` : ""}
+          ${renderHuntComparisons(item, summaries)}
           <div class="bj-hunt-metrics">
             <span><b>Loot médio</b>${Number.isFinite(item.averageLoot) ? formatNumber(Math.round(item.averageLoot)) : "—"} gold</span>
             <span><b>Lucro médio</b>${Number.isFinite(item.averageBalance) ? formatNumber(Math.round(item.averageBalance)) : "—"} gold</span>

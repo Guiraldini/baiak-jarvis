@@ -184,11 +184,13 @@
 #baiak-jarvis .bj-rate-bar { height: 5px; margin: 6px 0; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden; }
 #baiak-jarvis .bj-rate-bar i { display: block; height: 100%; background: linear-gradient(90deg, #438fd1, #43d17c); border-radius: inherit; }
 #baiak-jarvis .bj-comparison-list small { color: var(--bj-muted); font-size: 8.5px; }
-#baiak-jarvis .bj-versus { margin-top: 7px; padding: 7px; background: rgba(0,0,0,.16); border-left: 2px solid #65a7ff; border-radius: 4px; }
-#baiak-jarvis .bj-versus > b, #baiak-jarvis .bj-versus > span, #baiak-jarvis .bj-versus > small { display: block; }
-#baiak-jarvis .bj-versus > b { font-size: 10px; }
-#baiak-jarvis .bj-versus > span { margin-top: 1px; color: #aeb9c6; font-size: 8px; }
-#baiak-jarvis .bj-versus > small { margin-top: 3px; color: #8493a3; font-size: 8px; }
+#baiak-jarvis .bj-versus-list { margin-top: 7px; }
+#baiak-jarvis .bj-versus-list > b { color: #8ea0b4; font-size: 7px; letter-spacing: .06em; }
+#baiak-jarvis .bj-versus { display: grid; grid-template-columns: minmax(90px, 1fr) auto; gap: 2px 8px; margin-top: 4px; padding: 6px 7px; background: rgba(0,0,0,.16); border-left: 2px solid #65a7ff; border-radius: 4px; }
+#baiak-jarvis .bj-versus > span { color: #aeb9c6; font-size: 8.5px; }
+#baiak-jarvis .bj-versus > span b { color: var(--bj-text); }
+#baiak-jarvis .bj-versus > strong { font-size: 9px; text-align: right; }
+#baiak-jarvis .bj-versus > small { grid-column: 1 / -1; color: #8493a3; font-size: 8px; }
 #baiak-jarvis .bj-hunt-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-top: 7px; }
 #baiak-jarvis .bj-hunt-metrics span { padding: 5px; color: #d8e0e9; background: rgba(0,0,0,.16); border-radius: 4px; font-size: 8.5px; }
 #baiak-jarvis .bj-hunt-metrics b { display: block; margin-bottom: 1px; color: #7f8d9d; font-size: 7px; text-transform: uppercase; }
