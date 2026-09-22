@@ -162,6 +162,14 @@
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
 
+  function huntRunTransition(previous, current) {
+    const waveRestarted = previous.hadBossWave && current.waveNumber != null && previous.lastWaveNumber != null
+      && current.waveNumber < previous.lastWaveNumber;
+    const timerReset = current.durationSeconds + 3 < previous.lastDurationSeconds
+      && (previous.hadBossWave || previous.fromBoundary || waveRestarted);
+    return { waveRestarted, timerReset };
+  }
+
   function summarizeHuntRuns(runs) {
     const groups = new Map();
     for (const run of Array.isArray(runs) ? runs : []) {
@@ -549,6 +557,7 @@
     elapsedToSeconds,
     elementMentions,
     formatMinutes,
+    huntRunTransition,
     numberFromPtBr,
     percentFromPtBr,
     relativeDifference,

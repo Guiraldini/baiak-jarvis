@@ -67,6 +67,18 @@ assert.equal(core.elapsedToSeconds("03:28"), 208);
 assert.equal(core.elapsedToSeconds("1:02:03"), 3723);
 assert.equal(core.elapsedToSeconds("sem tempo"), null);
 assert.equal(core.elapsedToSeconds("03:70"), null);
+assert.deepEqual(core.huntRunTransition(
+  { hadBossWave: true, lastWaveNumber: 10, lastDurationSeconds: 160 },
+  { waveNumber: 1, durationSeconds: 165 }
+), { waveRestarted: true, timerReset: false });
+assert.deepEqual(core.huntRunTransition(
+  { hadBossWave: false, fromBoundary: true, lastWaveNumber: 1, lastDurationSeconds: 165 },
+  { waveNumber: 2, durationSeconds: 8 }
+), { waveRestarted: false, timerReset: true });
+assert.deepEqual(core.huntRunTransition(
+  { hadBossWave: false, lastWaveNumber: 4, lastDurationSeconds: 60 },
+  { waveNumber: 5, durationSeconds: 64 }
+), { waveRestarted: false, timerReset: false });
 
 const huntSummary = core.summarizeHuntRuns([
   { huntName: "Cobras", durationSeconds: 600, xpGain: 2000000, loot: 300000, balance: 250000, completedAt: 1 },

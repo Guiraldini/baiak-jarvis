@@ -710,11 +710,13 @@
     };
   }
 
-  function beginHuntTracker(telemetry, forceEligible = false) {
+  function beginHuntTracker(telemetry, forceEligible = false, fromBoundary = false) {
     const eligible = forceEligible || (telemetry.waveNumber === 1 && telemetry.durationSeconds <= 5);
     huntTracker = {
       huntName: telemetry.huntName,
-      startedAt: telemetry.capturedAt - telemetry.durationSeconds * 1000,
+      startedAt: fromBoundary ? telemetry.capturedAt : telemetry.capturedAt - telemetry.durationSeconds * 1000,
+      startTimerSeconds: fromBoundary ? telemetry.durationSeconds : 0,
+      fromBoundary,
       startXp: telemetry.xpGain,
       startKills: telemetry.kills,
       startLoot: telemetry.loot,
@@ -773,26 +775,35 @@
       beginHuntTracker(telemetry);
       return;
     }
+    const { waveRestarted, timerReset } = core.huntRunTransition(huntTracker, telemetry);
+    const bossFinished = huntTracker.hadBossWave && telemetry.waveNumber == null && !huntTracker.completed;
+    if (timerReset && huntTracker.fromBoundary && !huntTracker.hadBossWave && !waveRestarted) {
+      // O contador do jogo zera alguns segundos depois de voltar à wave 1.
+      // Mantém a XP inicial já capturada e apenas ajusta a base do relógio.
+      huntTracker.startTimerSeconds = 0;
+      huntTracker.maxDurationSeconds = telemetry.durationSeconds;
+      huntTracker.fromBoundary = false;
+    } else if (waveRestarted || timerReset) {
+      const endTimer = timerReset ? huntTracker.maxDurationSeconds : telemetry.durationSeconds;
+      if (telemetry.xpGain >= huntTracker.lastXp) {
+        saveCompletedHunt(telemetry, endTimer - huntTracker.startTimerSeconds);
+      }
+      // Em loop, o jogo pode voltar da wave final à primeira sem zerar o
+      // cronômetro. A virada das waves também marca uma nova medição.
+      beginHuntTracker(telemetry, true, !timerReset);
+      return;
+    }
     if (telemetry.xpGain < huntTracker.lastXp) {
       beginHuntTracker(telemetry);
       huntTracker.eligible = false;
       huntMonitorMessage = "O Hunt Analyzer foi zerado; a medição recomeça na próxima wave 1.";
       return;
     }
-
-    const timerReset = telemetry.durationSeconds + 3 < huntTracker.lastDurationSeconds
-      && (huntTracker.hadBossWave || latestSnapshot?.loopEnabled === true || (telemetry.waveNumber && huntTracker.lastWaveNumber && telemetry.waveNumber < huntTracker.lastWaveNumber));
-    const bossFinished = huntTracker.hadBossWave && telemetry.waveNumber == null && !huntTracker.completed;
-    if (timerReset) {
-      saveCompletedHunt(telemetry, huntTracker.maxDurationSeconds);
-      beginHuntTracker(telemetry);
-      return;
-    }
-    if (bossFinished) saveCompletedHunt(telemetry, Math.max(telemetry.durationSeconds, huntTracker.maxDurationSeconds));
+    if (bossFinished) saveCompletedHunt(telemetry, Math.max(telemetry.durationSeconds, huntTracker.maxDurationSeconds) - huntTracker.startTimerSeconds);
 
     huntTracker.lastXp = telemetry.xpGain;
     huntTracker.lastDurationSeconds = telemetry.durationSeconds;
-    huntTracker.lastWaveNumber = telemetry.waveNumber;
+    if (telemetry.waveNumber != null) huntTracker.lastWaveNumber = telemetry.waveNumber;
     huntTracker.maxDurationSeconds = Math.max(huntTracker.maxDurationSeconds, telemetry.durationSeconds);
     huntTracker.hadBossWave = huntTracker.hadBossWave || (telemetry.waveCount > 0 && telemetry.waveNumber === telemetry.waveCount);
     if (!huntTracker.completed && huntTracker.eligible) {
