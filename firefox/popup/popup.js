@@ -79,6 +79,7 @@
   huntName.addEventListener("change", save);
   ext.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.bjHuntOptions) populateHunts(changes.bjHuntOptions.newValue, huntName.value);
+    if (area === "local" && changes.bjSettings) automationEnabled.checked = Boolean(changes.bjSettings.newValue?.automationEnabled);
   });
   document.querySelector("#clear").addEventListener("click", async () => {
     await ext.storage.local.remove(["bjHistory", "bjLatest"]);

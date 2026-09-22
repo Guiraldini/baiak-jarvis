@@ -74,7 +74,7 @@
               <div class="bj-stat"><small>Objetivo</small><strong id="bj-objective">Equilíbrio</strong></div>
             </div>
             <section class="bj-auto" id="bj-auto">
-              <div><span class="bj-auto-dot"></span><strong id="bj-auto-title">AUTOMAÇÃO</strong></div>
+              <div class="bj-auto-head"><span class="bj-auto-dot"></span><strong id="bj-auto-title">AUTOMAÇÃO</strong><button type="button" id="bj-auto-toggle" data-action="toggle-automation" aria-pressed="true" title="Desligar automação">Desligar</button></div>
               <small id="bj-auto-message">Aguardando leitura da stamina.</small>
               <label class="bj-hunt-choice"><span>Hunt após o treino</span><select id="bj-hunt-select" title="Hunt automática"></select></label>
             </section>
@@ -386,9 +386,13 @@
     host.querySelector("#bj-auto-title").textContent = enabled
       ? `AUTOMAÇÃO ATIVA · ${(settings.huntName || "Cobras").toUpperCase()}`
       : "AUTOMAÇÃO DESATIVADA";
+    const toggle = host.querySelector("#bj-auto-toggle");
+    toggle.textContent = enabled ? "Desligar" : "Ligar";
+    toggle.setAttribute("aria-pressed", String(enabled));
+    toggle.title = enabled ? "Desligar automação de treino e hunt" : "Ligar automação de treino e hunt";
     host.querySelector("#bj-auto-message").textContent = enabled
       ? autoState.message
-      : "Ative pelo botão da extensão.";
+      : "As trocas automáticas estão pausadas.";
   }
 
   function renderHuntOptions() {
@@ -547,6 +551,7 @@
         throw new Error(`O botão Caçar de “${target}” está desativado.`);
       }
       if (!core.normalizeLookup(huntButton.textContent).includes("cacar")) throw new Error(`O botão Caçar de “${target}” não foi confirmado.`);
+      if (!settings.automationEnabled) throw new Error("Automação desligada antes de iniciar a hunt.");
       huntButton.click();
       for (let attempt = 0; attempt < 32; attempt += 1) {
         await delay(250);
@@ -567,6 +572,7 @@
     if (!isVisible(document.querySelector("#teleport-menu"))) toggle.click();
     const trainingOption = await waitForElement('#teleport-menu .tp-opt[data-tp="exercise"]', 2500);
     if (!trainingOption) throw new Error("A opção Treino online não apareceu no menu de teleportes.");
+    if (!settings.automationEnabled) throw new Error("Automação desligada antes de iniciar o treino.");
     trainingOption.click();
     for (let attempt = 0; attempt < 24; attempt += 1) {
       await delay(250);
@@ -1143,6 +1149,12 @@
     }
     const action = event.target.closest("button")?.dataset.action;
     if (action === "refresh") refreshAll();
+    if (action === "toggle-automation") {
+      settings.automationEnabled = !settings.automationEnabled;
+      renderAutomationStatus();
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
     if (action === "view-optimizer") await switchView("optimizer", true);

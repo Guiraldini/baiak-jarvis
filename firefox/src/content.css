@@ -89,7 +89,12 @@
 #baiak-jarvis .bj-muted { color: var(--bj-muted); }
 #baiak-jarvis footer { margin-top: 10px; color: #6f7b89; font-size: 9px; text-align: center; }
 .bj-auto { margin: 9px 0; padding: 9px 10px; border: 1px solid #2b3948; border-radius: 7px; background: #111821; }
-.bj-auto > div { display: flex; align-items: center; gap: 7px; }
+.bj-auto-head { display: flex; align-items: center; gap: 7px; }
+.bj-auto-head strong { min-width: 0; }
+#baiak-jarvis #bj-auto-toggle { flex: 0 0 auto; width: auto; height: 23px; margin-left: auto; padding: 0 9px; color: #f3aaaa; background: rgba(212,93,93,.12); border: 1px solid rgba(212,93,93,.35); border-radius: 5px; font-size: 9px; font-weight: 700; }
+#baiak-jarvis #bj-auto-toggle:hover { background: rgba(212,93,93,.24); }
+#baiak-jarvis #bj-auto-toggle[aria-pressed="false"] { color: #98e5b3; background: rgba(67,209,124,.12); border-color: rgba(67,209,124,.4); }
+#baiak-jarvis #bj-auto-toggle[aria-pressed="false"]:hover { background: rgba(67,209,124,.24); }
 .bj-auto strong { color: #b9c5d2; font-size: 9px; letter-spacing: .08em; }
 .bj-auto small { display: block; margin-top: 4px; color: #8996a5; font-size: 10px; }
 .bj-auto-dot { width: 7px; height: 7px; border-radius: 50%; background: #43d17c; box-shadow: 0 0 7px #43d17c; }
