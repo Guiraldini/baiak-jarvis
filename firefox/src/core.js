@@ -236,9 +236,17 @@
     return `${hours}h${String(minutes).padStart(2, "0")}`;
   }
 
+  function mountStaminaBonusMinutes(value) {
+    const text = clean(value).toLowerCase();
+    const hours = text.match(/\+?\s*(\d+)\s*h(?:ora(?:s)?)?/);
+    const minutes = text.match(/\+?\s*(\d+)\s*min(?:uto(?:s)?)?/);
+    if (!hours && !minutes) return null;
+    return (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0);
+  }
+
   function staminaPlan(snapshot, options) {
     const config = {
-      maxMinutes: 42 * 60,
+      maxMinutes: snapshot?.stamina?.maxMinutes || 42 * 60,
       floorPercent: 16,
       trainingDurationMinutes: 120,
       trainingRate: options && options.vipActive ? 8 : 4,
@@ -265,6 +273,7 @@
         action: "CONTINUE TREINANDO",
         currentMinutes,
         currentPercent,
+        maxMinutes: config.maxMinutes,
         huntFloor,
         huntCeiling,
         floorPercent,
@@ -284,6 +293,7 @@
         action: "HORA DE CAÇAR",
         currentMinutes,
         currentPercent,
+        maxMinutes: config.maxMinutes,
         huntFloor,
         huntCeiling,
         floorPercent,
@@ -304,6 +314,7 @@
         action: "CONTINUE CAÇANDO",
         currentMinutes,
         currentPercent,
+        maxMinutes: config.maxMinutes,
         huntFloor,
         huntCeiling,
         floorPercent,
@@ -324,6 +335,7 @@
       action: "HORA DE TREINAR",
       currentMinutes,
       currentPercent,
+      maxMinutes: config.maxMinutes,
       huntFloor,
       huntCeiling,
       floorPercent,
@@ -558,6 +570,7 @@
     elementMentions,
     formatMinutes,
     huntRunTransition,
+    mountStaminaBonusMinutes,
     numberFromPtBr,
     percentFromPtBr,
     relativeDifference,

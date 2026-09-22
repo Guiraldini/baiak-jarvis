@@ -38,6 +38,7 @@
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
   let selectedHuntKey = null;
+  let knownStaminaMaxMinutes = 42 * 60;
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -165,6 +166,15 @@
     const gameRoot = document.querySelector("#app") || document.body;
     const location = (document.querySelector("#wave-title")?.textContent || "").replace(/▾/g, "");
     const snapshot = core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
+    const mountBonus = [...document.querySelectorAll("#skills-panel-body .sk-stat")].find((row) => {
+      const label = core.normalizeLookup(row.querySelector(":scope > span")?.textContent);
+      return /montaria|mount/.test(label) && /stamina/.test(label) && /max|cap/.test(label);
+    });
+    if (mountBonus) {
+      const bonus = core.mountStaminaBonusMinutes(mountBonus.querySelector(":scope > span:nth-child(2)")?.textContent);
+      if (bonus != null) knownStaminaMaxMinutes = 42 * 60 + bonus;
+    }
+    if (snapshot.stamina) snapshot.stamina.maxMinutes = knownStaminaMaxMinutes;
     snapshot.characters = mergeCharacters(snapshot.characters, readPartyCharacters());
     return snapshot;
   }
@@ -622,10 +632,13 @@
     host.querySelector("#bj-rate").textContent = plan.vipActive ? "VIP · recuperação 8×" : "recuperação 4×";
     host.querySelector("#bj-countdown").textContent = core.formatMinutes(plan.remainingRealMinutes);
     const actionTime = new Date(plan.nextAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    host.querySelector("#bj-cycle-detail").textContent = `${plan.detail} Troca por volta de ${actionTime}.`;
+    const mountNote = plan.maxMinutes > 42 * 60
+      ? ` Teto ${formatStamina(plan.maxMinutes)} (montaria +${plan.maxMinutes - 42 * 60}min).`
+      : "";
+    host.querySelector("#bj-cycle-detail").textContent = `${plan.detail}${mountNote} Troca por volta de ${actionTime}.`;
     host.querySelector("#bj-progress-fill").style.width = `${Math.min(100, plan.currentPercent)}%`;
-    host.querySelector("#bj-floor-marker").style.left = `${(plan.huntFloor / (42 * 60)) * 100}%`;
-    host.querySelector("#bj-ceiling-marker").style.left = `${(plan.huntCeiling / (42 * 60)) * 100}%`;
+    host.querySelector("#bj-floor-marker").style.left = `${(plan.huntFloor / plan.maxMinutes) * 100}%`;
+    host.querySelector("#bj-ceiling-marker").style.left = `${(plan.huntCeiling / plan.maxMinutes) * 100}%`;
     host.querySelector("#bj-floor-label").textContent = `${formatStamina(plan.huntFloor)} · treinar`;
     host.querySelector("#bj-ceiling-label").textContent = `${formatStamina(plan.huntCeiling)} · caçar`;
   }

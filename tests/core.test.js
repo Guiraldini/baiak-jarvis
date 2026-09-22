@@ -67,6 +67,9 @@ assert.equal(core.elapsedToSeconds("03:28"), 208);
 assert.equal(core.elapsedToSeconds("1:02:03"), 3723);
 assert.equal(core.elapsedToSeconds("sem tempo"), null);
 assert.equal(core.elapsedToSeconds("03:70"), null);
+assert.equal(core.mountStaminaBonusMinutes("+15 min"), 15);
+assert.equal(core.mountStaminaBonusMinutes("+1h 15 min"), 75);
+assert.equal(core.mountStaminaBonusMinutes("—"), null);
 assert.deepEqual(core.huntRunTransition(
   { hadBossWave: true, lastWaveNumber: 10, lastDurationSeconds: 160 },
   { waveNumber: 1, durationSeconds: 165 }
@@ -107,6 +110,25 @@ assert.equal(vipTrainingPlan.huntFloor, 403);
 assert.equal(vipTrainingPlan.huntCeiling, 1363);
 assert.equal(vipTrainingPlan.targetPercent, 54);
 assert.equal(vipTrainingPlan.remainingRealMinutes, 32.25);
+
+const mountedPlan = core.staminaPlan({ ...snapshot, stamina: { time: "16:56", percent: 40, maxMinutes: 42 * 60 + 15 }, location: "Cobras", activity: "caçando" }, { vipActive: true });
+assert.equal(mountedPlan.maxMinutes, 2535);
+assert.equal(mountedPlan.huntFloor, 406);
+assert.equal(mountedPlan.huntCeiling, 1366);
+assert.equal(mountedPlan.remainingRealMinutes, 610);
+assert.equal(mountedPlan.plannedHuntMinutes, 960);
+assert.deepEqual(core.automationDecision({
+  ...snapshot, location: "Cobras", activity: "caçando",
+  stamina: { time: "6:46", percent: 16, maxMinutes: 2535 }
+}, { enabled: true, huntName: "Cobras", vipActive: true }), {
+  type: "train", target: "Treino online", reason: "Stamina chegou a 6h46 (16%)."
+});
+assert.deepEqual(core.automationDecision({
+  ...snapshot, location: "Treino online", activity: "treinando",
+  stamina: { time: "22:46", percent: 54, maxMinutes: 2535 }
+}, { enabled: true, huntName: "Cobras", vipActive: true }), {
+  type: "hunt", target: "Cobras", reason: "Stamina chegou a 22h46 (54%)."
+});
 
 const huntingSnapshot = {
   ...snapshot,
