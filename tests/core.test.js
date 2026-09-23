@@ -57,6 +57,9 @@ assert.ok(recommendations.some((item) => item.id === "inbox"));
 assert.ok(recommendations.some((item) => item.id === "training"));
 
 assert.equal(core.numberFromPtBr("74.774.148"), 74774148);
+assert.equal(core.skillMemberName("Druid · Gabsm", "ED"), "Gabsm");
+assert.equal(core.skillMemberName("Knight · Maxxi", "EK"), "Maxxi");
+assert.equal(core.skillMemberName("", "Amigo"), "Amigo");
 assert.equal(core.percentFromPtBr("+21.346%"), 21.346);
 assert.equal(core.percentFromPtBr("-4,04%"), -4.04);
 assert.deepEqual(core.parseVitalBar("5.631/5.631"), { current: 5631, max: 5631 });

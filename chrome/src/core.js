@@ -11,6 +11,11 @@
     return String(value || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim();
   }
 
+  function skillMemberName(title, fallbackName) {
+    const titleName = clean(title).match(/(?:·|\||—|–)\s*(.+)$/);
+    return clean(titleName ? titleName[1] : fallbackName);
+  }
+
   function numberFromPtBr(value) {
     if (value == null || value === "") return null;
     const normalized = String(value).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, "");
@@ -581,6 +586,7 @@
     findPartyKnight,
     automationDecision,
     normalizeLookup,
+    skillMemberName,
     staminaPlan,
     summarizeHuntRuns,
     usage

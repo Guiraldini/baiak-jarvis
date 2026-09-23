@@ -195,8 +195,9 @@
     return null;
   }
 
-  function readSelectedSkillProfile(button) {
-    const name = core.clean(button?.textContent);
+  function readSelectedSkillProfile(button, partyName) {
+    // O texto do botão é só a vocação (ED/EK/MS); o nome está no title.
+    const name = core.skillMemberName(button?.title, partyName || button?.textContent);
     const vocation = vocationFromPanel(document.querySelector("#skills-panel-body .sk-voc")?.textContent || button?.title);
     const primarySkill = ({ Knight: "Melee", Druid: "Magic", Sorcerer: "Magic", Paladin: "Distance" })[vocation];
     const skillRows = [...document.querySelectorAll("#skills-panel-body .sk-skill:not(#sk-xp-row)")].map((row) => {
@@ -260,14 +261,15 @@
     if (!force && Date.now() - lastSkillsScanAt < 30000) return;
     const buttons = [...document.querySelectorAll("#skills-members .sk-mem")];
     if (!buttons.length) return;
+    const partyMembers = readPartyCharacters();
     skillsScanBusy = true;
     const original = buttons.find((button) => button.classList.contains("on")) || buttons[0];
     try {
-      for (const button of buttons) {
+      for (const [index, button] of buttons.entries()) {
         button.click();
         for (let attempt = 0; attempt < 10 && !button.classList.contains("on"); attempt += 1) await delay(25);
         await delay(50);
-        const scanned = readSelectedSkillProfile(button);
+        const scanned = readSelectedSkillProfile(button, partyMembers[index]?.name);
         if (!scanned.name) continue;
         const current = profiles[scanned.name] || genericProfile(scanned);
         Object.assign(current, Object.fromEntries(Object.entries(scanned).filter(([, value]) => value != null)));

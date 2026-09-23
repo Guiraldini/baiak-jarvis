@@ -2,7 +2,11 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
-## Versão 0.8.6
+## Versão 0.8.7
+
+- associa os equipamentos e bônus lidos no painel Skills ao nome real do personagem, que o jogo guarda no título do botão;
+- usa o nome correspondente da Party como alternativa quando o título não estiver disponível;
+- corrige instalações novas em que o card da Party mostrava os personagens sem os equipamentos detectados.
 
 - adiciona um botão Ligar/Desligar diretamente ao card de automação no jogo;
 - o botão pausa ou retoma as trocas automáticas entre Treino online e a hunt escolhida;
@@ -65,7 +69,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.6.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.7.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -76,7 +80,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.6.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.7.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -96,4 +100,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.8.6 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.7 AUTO · execução local`.
