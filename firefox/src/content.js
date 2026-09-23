@@ -35,6 +35,7 @@
   let huntScanBusy = false;
   let refreshBusy = false;
   let huntRuns = [];
+  let dailyXp = { day: core.brazilDayKey(Date.now()), xp: 0, waves: 0, partial: false };
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
   let selectedHuntKey = null;
@@ -760,6 +761,13 @@
     return Number.isFinite(endValue) && Number.isFinite(startValue) ? Math.max(0, endValue - startValue) : null;
   }
 
+  function rollDailyXp(now = Date.now()) {
+    const day = core.brazilDayKey(now);
+    if (dailyXp.day === day) return false;
+    dailyXp = { day, xp: 0, waves: 0, partial: false };
+    return true;
+  }
+
   function saveCompletedHunt(telemetry, durationSeconds) {
     if (!huntTracker?.eligible || huntTracker.completed || durationSeconds < 10) return;
     const xpGain = metricDelta(telemetry.xpGain, huntTracker.startXp);
@@ -779,8 +787,9 @@
       balance: metricDelta(telemetry.balance, huntTracker.startBalance)
     };
     huntRuns = [...huntRuns, record].slice(-200);
+    dailyXp = core.addDailyHuntRun(dailyXp, record);
     huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
-    ext.storage.local.set({ bjHuntRuns: huntRuns }).catch(() => {});
+    ext.storage.local.set({ bjHuntRuns: huntRuns, bjDailyXp: dailyXp }).catch(() => {});
   }
 
   function monitorHuntRun(snapshot) {
@@ -878,14 +887,15 @@
   }
 
   function renderHuntHistory() {
+    if (rollDailyXp()) ext.storage.local.set({ bjDailyXp: dailyXp }).catch(() => {});
     const summaries = core.summarizeHuntRuns(huntRuns);
     const best = summaries[0] || null;
     host.querySelector("#bj-hunt-run-count").textContent = `${huntRuns.length} ${huntRuns.length === 1 ? "wave" : "waves"}`;
     host.querySelector("#bj-live-run").innerHTML = `<span class="bj-live-dot"></span><div><b>MEDIÇÃO EM TEMPO REAL</b><small>${escapeHtml(huntMonitorMessage)}</small></div>`;
-    host.querySelector("#bj-hunt-summary").innerHTML = huntRuns.length ? `
-      <article><small>Melhor rendimento</small><strong>${escapeHtml(best.huntName)}</strong><span>${formatNumber(Math.round(best.xpPerHour))} XP/h</span></article>
+    host.querySelector("#bj-hunt-summary").innerHTML = `
+      <article><small>Melhor rendimento</small><strong>${best ? escapeHtml(best.huntName) : "—"}</strong><span>${best ? `${formatNumber(Math.round(best.xpPerHour))} XP/h` : "Aguardando waves"}</span></article>
       <article><small>Hunts comparadas</small><strong>${summaries.length}</strong><span>${huntRuns.length} waves completas</span></article>
-      <article><small>XP registrado</small><strong>${formatNumber(huntRuns.reduce((sum, run) => sum + run.xpGain, 0))}</strong><span>somando todas as waves</span></article>` : "";
+      <article><small>XP de hoje</small><strong>${formatNumber(dailyXp.xp)}</strong><span>${dailyXp.partial ? "Parcial: histórico anterior incompleto" : `${dailyXp.waves} ${dailyXp.waves === 1 ? "wave" : "waves"} hoje`} · zera 00h (Brasília)</span></article>`;
 
     const comparison = host.querySelector("#bj-hunt-comparison");
     if (!summaries.length) {
@@ -1162,8 +1172,14 @@
     if (action === "view-optimizer") await switchView("optimizer", true);
     if (action === "delete-hunt-run") {
       const id = event.target.closest("button")?.dataset.runId;
+      const removed = huntRuns.find((run) => run.id === id);
       huntRuns = huntRuns.filter((run) => run.id !== id);
-      await ext.storage.local.set({ bjHuntRuns: huntRuns });
+      rollDailyXp();
+      if (removed && Number.isFinite(removed.completedAt) && Number.isFinite(removed.xpGain)
+        && core.brazilDayKey(removed.completedAt) === dailyXp.day) {
+        dailyXp = { ...dailyXp, xp: Math.max(0, dailyXp.xp - removed.xpGain), waves: Math.max(0, dailyXp.waves - 1) };
+      }
+      await ext.storage.local.set({ bjHuntRuns: huntRuns, bjDailyXp: dailyXp });
       renderHuntHistory();
     }
     if (action === "reload-stage") {
@@ -1214,11 +1230,16 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [] }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns }) => {
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjDailyXp: null }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjDailyXp }) => {
     settings = { ...defaults, ...bjSettings };
     profiles = { ...profiles, ...(bjProfiles || {}) };
     huntOptions = Array.isArray(bjHuntOptions) && bjHuntOptions.length ? bjHuntOptions : ["Cobras"];
     huntRuns = Array.isArray(bjHuntRuns) ? bjHuntRuns : [];
+    const today = core.brazilDayKey(Date.now());
+    const validDaily = bjDailyXp?.day === today && Number.isFinite(bjDailyXp.xp) && bjDailyXp.xp >= 0
+      && Number.isFinite(bjDailyXp.waves) && bjDailyXp.waves >= 0;
+    dailyXp = validDaily ? bjDailyXp : core.dailyHuntXp(huntRuns, today);
+    if (!validDaily) ext.storage.local.set({ bjDailyXp: dailyXp }).catch(() => {});
     schedule();
     setTimeout(() => scanHuntOptions(false).catch(() => {}), 1500);
   });

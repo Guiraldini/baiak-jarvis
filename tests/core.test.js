@@ -70,6 +70,17 @@ assert.equal(core.elapsedToSeconds("03:28"), 208);
 assert.equal(core.elapsedToSeconds("1:02:03"), 3723);
 assert.equal(core.elapsedToSeconds("sem tempo"), null);
 assert.equal(core.elapsedToSeconds("03:70"), null);
+assert.equal(core.brazilDayKey(Date.parse("2026-09-23T02:59:59Z")), "2026-09-22");
+assert.equal(core.brazilDayKey(Date.parse("2026-09-23T03:00:00Z")), "2026-09-23");
+const dailyRuns = [
+  { completedAt: Date.parse("2026-09-23T02:59:59Z"), xpGain: 100 },
+  { completedAt: Date.parse("2026-09-23T03:00:00Z"), xpGain: 200 },
+  { completedAt: Date.parse("2026-09-23T12:00:00Z"), xpGain: 300 }
+];
+assert.deepEqual(core.dailyHuntXp(dailyRuns, "2026-09-23"), { day: "2026-09-23", xp: 500, waves: 2, partial: false });
+assert.equal(core.dailyHuntXp(Array.from({ length: 200 }, () => dailyRuns[1]), "2026-09-23").partial, true);
+assert.deepEqual(core.addDailyHuntRun({ day: "2026-09-22", xp: 900, waves: 3, partial: true }, dailyRuns[1]),
+  { day: "2026-09-23", xp: 200, waves: 1, partial: false });
 assert.equal(core.mountStaminaBonusMinutes("+15 min"), 15);
 assert.equal(core.mountStaminaBonusMinutes("+1h 15 min"), 75);
 assert.equal(core.mountStaminaBonusMinutes("—"), null);

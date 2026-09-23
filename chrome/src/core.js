@@ -6,6 +6,9 @@
   "use strict";
 
   const VOCATIONS = "Druid|Knight|Sorcerer|Paladin";
+  const brazilDayFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
+  });
 
   function clean(value) {
     return String(value || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim();
@@ -165,6 +168,31 @@
     if (parts.at(-1) >= 60 || (parts.length === 3 && parts[1] >= 60)) return null;
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+
+  function brazilDayKey(timestamp) {
+    const parts = brazilDayFormatter.formatToParts(new Date(timestamp));
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${value.year}-${value.month}-${value.day}`;
+  }
+
+  function dailyHuntXp(runs, day) {
+    const records = (Array.isArray(runs) ? runs : []).filter((run) =>
+      Number.isFinite(run?.completedAt) && Number.isFinite(run?.xpGain) && brazilDayKey(run.completedAt) === day
+    );
+    const oldest = Math.min(...(Array.isArray(runs) ? runs : []).map((run) => run?.completedAt).filter(Number.isFinite));
+    return {
+      day,
+      xp: records.reduce((sum, run) => sum + run.xpGain, 0),
+      waves: records.length,
+      partial: runs?.length >= 200 && Number.isFinite(oldest) && brazilDayKey(oldest) === day
+    };
+  }
+
+  function addDailyHuntRun(state, run) {
+    const day = brazilDayKey(run.completedAt);
+    const current = state?.day === day ? state : { day, xp: 0, waves: 0, partial: false };
+    return { ...current, xp: current.xp + run.xpGain, waves: current.waves + 1 };
   }
 
   function huntRunTransition(previous, current) {
@@ -568,9 +596,12 @@
   return {
     buildRecommendations,
     bossModeDetected,
+    addDailyHuntRun,
+    brazilDayKey,
     clean,
     compactHistory,
     durationToMinutes,
+    dailyHuntXp,
     elapsedToSeconds,
     elementMentions,
     formatMinutes,
