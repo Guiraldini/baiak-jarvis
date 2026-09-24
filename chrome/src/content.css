@@ -135,6 +135,10 @@
 #baiak-jarvis .bj-stage-status { padding: 12px; color: var(--bj-muted); background: var(--bj-panel); border-radius: 7px; font-size: 10px; }
 #baiak-jarvis .bj-stage-status.bj-error { color: #f2a0a0; }
 #baiak-jarvis .bj-stage-status button { width: auto; margin-left: 5px; padding: 3px 6px; font-size: 9px; }
+#baiak-jarvis .bj-catalog-summary { margin-top: 6px; padding: 7px 8px; background: var(--bj-panel); border-radius: 6px; }
+#baiak-jarvis .bj-catalog-summary b { display: block; margin-bottom: 3px; color: var(--bj-gold); font-size: 8px; letter-spacing: .07em; }
+#baiak-jarvis .bj-catalog-summary span { color: #bac5d1; font-size: 9px; }
+#baiak-jarvis .bj-catalog-summary + .bj-source { display: inline-block; margin-top: 8px; }
 #baiak-jarvis .bj-spinner { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border: 2px solid #465363; border-top-color: var(--bj-gold); border-radius: 50%; animation: bj-spin .8s linear infinite; }
 @keyframes bj-spin { to { transform: rotate(360deg); } }
 #baiak-jarvis .bj-matchup { padding: 9px; background: rgba(67,209,124,.08); border-left: 3px solid #43d17c; border-radius: 6px; }

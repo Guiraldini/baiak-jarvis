@@ -391,6 +391,20 @@
       .trim();
   }
 
+  function catalogStageFromCells(cells) {
+    if (!Array.isArray(cells) || cells.length < 4) return null;
+    const values = cells.map(clean);
+    if (!/^\d+\+?$/.test(values[0])) return null;
+    const title = values[1].replace(/\s*\(dados de catálogo\)\s*$/i, "");
+    if (!title) return null;
+    return {
+      title,
+      level: Number(values[0].replace("+", "")),
+      monsters: values[2].split(",").map(clean).filter(Boolean),
+      drops: values[3].split(",").map(clean).filter(Boolean)
+    };
+  }
+
   function elementMentions(value) {
     const aliases = {
       physical: ["physical", "fisico", "fisica"], earth: ["earth", "terra"], death: ["death", "morte"],
@@ -598,6 +612,7 @@
     bossModeDetected,
     addDailyHuntRun,
     brazilDayKey,
+    catalogStageFromCells,
     clean,
     compactHistory,
     durationToMinutes,

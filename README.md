@@ -2,6 +2,12 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.9
+
+- reconhece fases presentes apenas na tabela do catálogo, como Livraria EARTH, ENERGY e FIRE;
+- mostra nível mínimo, monstros e drops dessas fases sem inventar HP, XP, dano ou afinidades elementais;
+- renova automaticamente o índice antigo salvo ao instalar a atualização e ao usar “Atualizar agora”.
+
 ## Versão 0.8.8
 
 - troca o card “XP registrado” por “XP de hoje”, com zeramento à meia-noite no horário de Brasília;
@@ -74,7 +80,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.8.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.9.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -85,7 +91,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.8.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.9.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -105,4 +111,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.8.8 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.9 AUTO · execução local`.

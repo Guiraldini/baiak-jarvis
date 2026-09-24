@@ -76,7 +76,7 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  fetch(message.url, { credentials: "omit", cache: "force-cache" })
+  fetch(message.url, { credentials: "omit", cache: message.fresh === true ? "no-cache" : "force-cache" })
     .then(async (response) => {
       if (!response.ok) throw new Error(`Catálogo respondeu ${response.status}`);
       sendResponse({ ok: true, html: await response.text(), url: response.url });

@@ -928,29 +928,44 @@
     return core.normalizeLookup(value).split(" ").map((word) => word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word).join(" ");
   }
 
-  async function fetchGuide(url) {
-    const response = await ext.runtime.sendMessage({ type: "bj:fetch-guide", url });
+  async function fetchGuide(url, fresh = false) {
+    const response = await ext.runtime.sendMessage({ type: "bj:fetch-guide", url, fresh });
     if (!response || !response.ok) throw new Error(response?.error || "Catálogo indisponível");
     return response;
   }
 
   function parseStageIndex(html) {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const result = {};
+    const entries = {};
+    const catalogEntries = {};
     for (const link of doc.querySelectorAll('a[href^="/fases/"]')) {
       const href = link.getAttribute("href");
       const name = core.clean(link.textContent);
       if (!name || !href || href === "/fases/") continue;
-      result[lookupKey(name)] = href;
+      entries[lookupKey(name)] = href;
     }
-    return result;
+    for (const row of doc.querySelectorAll("table tr")) {
+      const cells = [...row.querySelectorAll("td")].map((cell) => core.clean(cell.textContent));
+      const stage = core.catalogStageFromCells(cells);
+      if (!stage) continue;
+      const key = lookupKey(stage.title);
+      if (!key) continue;
+      catalogEntries[key] = stage;
+    }
+    return { entries, catalogEntries };
   }
 
-  function findStagePath(index, location) {
+  function findStageEntry(index, location) {
     const wanted = lookupKey(location);
     if (index[wanted]) return index[wanted];
     const partial = Object.entries(index).find(([key]) => key.includes(wanted) || wanted.includes(key));
     if (partial) return partial[1];
+    return null;
+  }
+
+  function findStagePath(index, location) {
+    const match = findStageEntry(index, location);
+    if (match) return match;
     return ({ cobra: "/fases/cobra-cave/", cobras: "/fases/cobra-cave/" })[core.normalizeLookup(location)] || null;
   }
 
@@ -1003,18 +1018,27 @@
     try {
       const stored = await ext.storage.local.get({ bjStageIndex: null, bjStageCache: {} });
       let indexRecord = stored.bjStageIndex;
-      if (!indexRecord || Date.now() - indexRecord.savedAt > 7 * 86400000) {
-        const indexResponse = await fetchGuide("https://guiabaiakidle.com/fases/");
-        indexRecord = { savedAt: Date.now(), entries: parseStageIndex(indexResponse.html) };
+      if (force || !indexRecord || indexRecord.version !== 2 || Date.now() - indexRecord.savedAt > 7 * 86400000) {
+        const indexResponse = await fetchGuide("https://guiabaiakidle.com/fases/", true);
+        indexRecord = { version: 2, savedAt: Date.now(), ...parseStageIndex(indexResponse.html) };
         await ext.storage.local.set({ bjStageIndex: indexRecord });
       }
       const path = findStagePath(indexRecord.entries || {}, name);
-      if (!path) throw new Error(`Fase “${name}” não encontrada no catálogo.`);
+      const catalog = findStageEntry(indexRecord.catalogEntries || {}, name);
+      if (!path && !catalog) throw new Error(`Fase “${name}” não encontrada no catálogo.`);
       const cached = stored.bjStageCache[key];
-      let data = !force && cached && Date.now() - cached.capturedAt < 7 * 86400000 ? cached : null;
+      let data = !force && cached && !(path && cached.catalogOnly) && Date.now() - cached.capturedAt < 7 * 86400000 ? cached : null;
       if (!data) {
-        const response = await fetchGuide(`https://guiabaiakidle.com${path}`);
-        data = parseStagePage(response.html, response.url);
+        if (path) {
+          const response = await fetchGuide(`https://guiabaiakidle.com${path}`, force);
+          data = parseStagePage(response.html, response.url);
+        } else {
+          data = {
+            catalogOnly: true, title: catalog.title, level: catalog.level,
+            monsters: catalog.monsters, drops: catalog.drops,
+            url: "https://guiabaiakidle.com/fases/", capturedAt: Date.now()
+          };
+        }
         const nextCache = { ...stored.bjStageCache, [key]: data };
         await ext.storage.local.set({ bjStageCache: Object.fromEntries(Object.entries(nextCache).slice(-30)) });
       }
@@ -1039,6 +1063,15 @@
     }
     if (!stageState.data) return;
     const stage = stageState.data;
+    if (stage.catalogOnly) {
+      target.innerHTML = `
+        <div class="bj-stage-head"><strong>${escapeHtml(stage.title)}</strong><span>nível ${stage.level}+</span></div>
+        <div class="bj-stage-status">Esta fase consta no catálogo, mas ainda não tem página detalhada. O guia informa os monstros e drops abaixo; HP, XP, dano e afinidades elementais ainda não estão disponíveis para uma comparação segura.</div>
+        <div class="bj-catalog-summary"><b>MONSTROS</b><span>${escapeHtml(stage.monsters.join(", ") || "Não informados")}</span></div>
+        <div class="bj-catalog-summary"><b>DROPS EM DESTAQUE</b><span>${escapeHtml(stage.drops.join(", ") || "Não informados")}</span></div>
+        <a class="bj-source" href="${escapeHtml(stage.url)}" target="_blank" rel="noreferrer">Fonte: Guia Baiak Idle</a>`;
+      return;
+    }
     const knight = core.findPartyKnight(latestSnapshot, profiles);
     const matchup = core.compareKnightToStage(stage, knight);
     const partyMembers = (latestSnapshot?.characters || []).map((character) => profiles[character.name] || character);

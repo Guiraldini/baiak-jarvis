@@ -177,6 +177,17 @@ assert.equal(cobraMatchup.physicalResistance, true);
 assert.equal(cobraMatchup.mostDangerous.name, "Cobra Assassin");
 assert.ok(cobraMatchup.hitPercent > 5 && cobraMatchup.hitPercent < 6);
 
+assert.deepEqual(core.catalogStageFromCells([
+  "500+", "Livraria EARTH (dados de catálogo)",
+  "Biting Book, Cursed Book, Ink Blob",
+  "small diamond, small stone, small topaz, protection amulet"
+]), {
+  title: "Livraria EARTH", level: 500,
+  monsters: ["Biting Book", "Cursed Book", "Ink Blob"],
+  drops: ["small diamond", "small stone", "small topaz", "protection amulet"]
+});
+assert.equal(core.catalogStageFromCells(["Nível mínimo", "Fase", "Monstros", "Drops"]), null);
+
 const balanceAdvice = core.buildBalanceAdvice(cobraStage, [
   { name: "PartyTank", vocation: "Knight", skillType: "Melee", skillLevel: 100, skillBonus: 7, protections: { physical: 10, earth: 6, death: 11 }, bonusEntries: [{ label: "Chance de crítico", value: "+1%" }] },
   { name: "PartyMage", vocation: "Sorcerer", skillType: "Magic", skillLevel: 103, skillBonus: 21, protections: { physical: 3, earth: 0, death: 6 }, bonusEntries: [] }
