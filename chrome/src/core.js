@@ -715,6 +715,17 @@
     };
   }
 
+  function codexCompletion(quantities, counts, done = false) {
+    const remaining = quantities.map((quantity, index) => done ? 0 : Math.max(0, quantity - Math.max(0, Number(counts[index]) || 0)));
+    const total = quantities.reduce((sum, quantity) => sum + quantity, 0);
+    const missing = remaining.reduce((sum, quantity) => sum + quantity, 0);
+    return {
+      percent: done || (total > 0 && missing === 0) ? 100 : total > 0 ? Math.floor((total - missing) / total * 100) : 0,
+      remaining,
+      ready: total > 0 && missing === 0
+    };
+  }
+
   return {
     buildRecommendations,
     bossModeDetected,
@@ -725,6 +736,7 @@
     catalogStageFromCells,
     clean,
     compactHistory,
+    codexCompletion,
     durationToMinutes,
     dailyHuntXp,
     elapsedToSeconds,

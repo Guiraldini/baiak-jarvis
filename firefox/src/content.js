@@ -450,10 +450,10 @@
       const quantities = hunt.req.map((entry) => entry.qty * (tier === 1 ? 1 : tier === 2 ? 5 : 15));
       const counts = codexProgress?.prog[id] || [];
       const done = codexProgress?.done.includes(id) || false;
-      const total = quantities.reduce((sum, value) => sum + value, 0);
-      const collected = quantities.reduce((sum, value, index) => sum + Math.min(value, counts[index] || 0), 0);
-      return { id, tier, done, counts, quantities, percent: done ? 100 : total ? Math.round(collected / total * 100) : 0,
-        ready: !done && codexProgress && quantities.every((value, index) => (counts[index] || 0) >= value) };
+      const completion = core.codexCompletion(quantities, counts, done);
+      const pending = completion.remaining.map((count, index) => ({ count, item: hunt.req[index].item })).filter((entry) => entry.count > 0);
+      return { id, tier, done, counts, quantities, pending, percent: completion.percent,
+        ready: !done && codexProgress && completion.ready };
     });
     if (codexExpandedTier < 1 || codexExpandedTier > 3) codexExpandedTier = rows.find((row) => !row.done)?.tier || 3;
     const signature = `${hunt.id}|${codexExpandedTier}|${Boolean(codexProgress)}`;
@@ -467,9 +467,9 @@
         </button>`).join("")}</div>
       ${rows.filter((row) => row.tier === codexExpandedTier).map((row) => `
         <div class="bj-codex-bar"><i style="width:${row.percent}%"></i></div>
-        <div class="bj-codex-status">${!codexProgress ? "Aguardando dados da conta" : row.done ? "Concluído" : row.ready ? "Pronto para entregar no jogo" : `${row.percent}% dos itens entregues`}</div>
+        <div class="bj-codex-status">${!codexProgress ? "Aguardando dados da conta" : row.done ? "Concluído" : row.ready ? "Pronto para entregar no jogo" : `${row.percent}% · Faltam ${formatNumber(row.pending.reduce((sum, entry) => sum + entry.count, 0))} itens (${escapeHtml(row.pending[0]?.item || "")}: ${formatNumber(row.pending[0]?.count || 0)})`}</div>
         <div class="bj-codex-items">${hunt.req.map((entry, index) => `
-          <div class="bj-codex-item"><span title="${escapeHtml(entry.item)}">${escapeHtml(entry.item)}</span><b>${codexProgress ? formatNumber(row.done ? row.quantities[index] : Math.min(row.quantities[index], row.counts[index] || 0)) : "—"}/${formatNumber(row.quantities[index])}</b></div>`).join("")}</div>`).join("")}`;
+          <div class="bj-codex-item${codexProgress && !row.done && (row.counts[index] || 0) < row.quantities[index] ? " bj-codex-item-pending" : ""}"><span title="${escapeHtml(entry.item)}">${escapeHtml(entry.item)}</span><b>${codexProgress ? formatNumber(row.done ? row.quantities[index] : Math.min(row.quantities[index], row.counts[index] || 0)) : "—"}/${formatNumber(row.quantities[index])}</b></div>`).join("")}</div>`).join("")}`;
   }
 
   function render(snapshot) {

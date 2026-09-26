@@ -84,6 +84,8 @@
 #baiak-jarvis .bj-codex-item { display: flex; justify-content: space-between; gap: 4px; padding: 5px; background: var(--bj-panel); border-radius: 4px; font-size: 8px; }
 #baiak-jarvis .bj-codex-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #baiak-jarvis .bj-codex-item b { flex: 0 0 auto; color: #f1c766; }
+#baiak-jarvis .bj-codex-item.bj-codex-item-pending { background: rgba(242,184,75,.13); outline: 1px solid rgba(242,184,75,.32); }
+#baiak-jarvis .bj-codex-item.bj-codex-item-pending b { color: #ffd77d; }
 #baiak-jarvis [data-action="toggle-codex"][aria-pressed="true"] { color: #161108; background: var(--bj-gold); }
 @media (max-width: 1110px) {
   #baiak-jarvis .bj-codex { position: static; width: auto; max-height: 220px; border: 0; border-top: 1px solid var(--bj-border); border-radius: 0; box-shadow: none; }
