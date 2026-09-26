@@ -2,6 +2,15 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.24
+
+- marca com uma aura vermelha os itens da Loot Pouch que ainda faltam em alguma missão Codex da conta;
+- cruza nome e raridade do item com 690 missões do cliente do jogo (hunts, chefes e equipamentos), incluindo os três níveis de cada hunt;
+- remove o destaque quando as quantidades exigidas são completadas ou a missão é entregue; itens sem Codex não recebem marcação;
+- aguarda a leitura do progresso da conta antes de marcar itens e atualiza o destaque conforme a Loot Pouch muda.
+
+O catálogo de itens Codex pode ser atualizado após uma mudança do jogo com `node scripts/build_codex_item_catalog.js caminho-do-bundle.js`.
+
 ## Versão 0.8.23
 
 - grava o histórico de hunts em sequência para evitar perda de waves e XP de personagens quando várias leituras terminam próximas;
@@ -175,7 +184,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.22.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.24.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -186,7 +195,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.22.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.24.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -205,9 +214,12 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 ```powershell
 node .\tests\core.test.js
 node .\tests\codex.test.js
+node .\tests\loot-codex.test.js
 node .\tests\background.test.js
+node .\tests\persistence.test.js
+node .\tests\recovery.test.js
 ```
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.22 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.24 AUTO · execução local`.

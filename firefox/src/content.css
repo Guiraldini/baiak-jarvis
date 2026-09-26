@@ -365,6 +365,19 @@
 #baiak-jarvis .bj-boss-result-leader { margin-top: 7px; color: #91d9a8; }
 #baiak-jarvis .bj-boss-result-damage { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; }
 
+/* Destaca apenas os itens da Loot Pouch que ainda faltam em alguma missão Codex. */
+#inv-grid > .cell.bj-codex-needed {
+  outline: 2px solid #f04f59 !important;
+  outline-offset: -2px;
+  box-shadow: 0 0 0 1px rgba(240,79,89,.8), 0 0 12px rgba(240,79,89,.75) !important;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #inv-grid > .cell.bj-codex-needed { animation: bj-codex-pouch-glow 2s ease-in-out infinite; }
+  @keyframes bj-codex-pouch-glow {
+    50% { box-shadow: 0 0 0 1px rgba(240,79,89,.95), 0 0 19px rgba(240,79,89,.95); }
+  }
+}
+
 @media (max-width: 720px) {
   #baiak-jarvis { top: 10px; right: 10px; width: min(300px, calc(100vw - 20px)); }
   #baiak-jarvis .bj-body { overflow: auto; }

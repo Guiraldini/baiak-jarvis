@@ -812,6 +812,22 @@
     };
   }
 
+  function codexItemNeeds(name, tier, catalog, progress) {
+    if (!progress || !Array.isArray(progress.done) || !progress.prog) return null;
+    const references = catalog?.items?.[normalizeLookup(name)] || [];
+    const done = new Set(progress.done);
+    const itemTier = Number.isFinite(tier) ? tier : 0;
+    return references.flatMap(([missionIndex, requirementIndex, quantity, requiredTier, minTier]) => {
+      const mission = catalog.missions[missionIndex];
+      if (!mission || done.has(mission.id)
+        || (requiredTier != null && itemTier < requiredTier)
+        || (minTier != null && itemTier < minTier)) return [];
+      const completed = Number(progress.prog[mission.id]?.[requirementIndex]) || 0;
+      const missing = Math.max(0, quantity - completed);
+      return missing ? [{ id: mission.id, title: mission.title, missing }] : [];
+    });
+  }
+
   return {
     buildRecommendations,
     bossModeDetected,
@@ -826,6 +842,7 @@
     clean,
     compactHistory,
     codexCompletion,
+    codexItemNeeds,
     durationToMinutes,
     dailyHuntXp,
     elapsedToSeconds,

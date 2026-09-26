@@ -7,6 +7,7 @@
   const core = globalThis.BaiakJarvisCore;
   const equipmentCatalog = globalThis.BaiakJarvisEquipmentCatalog || { items: [], capturedAt: null };
   const codexCatalog = globalThis.BaiakJarvisCodexCatalog || [];
+  const codexItemCatalog = globalThis.BaiakJarvisCodexItemCatalog || { missions: [], items: {} };
   const extensionVersion = ext.runtime.getManifest().version;
   const defaults = {
     enabled: true,
@@ -213,6 +214,7 @@
       codexProgress = payload;
       lastCodexRender = "";
       renderCodex();
+      renderLootCodexAuras();
     } catch (_error) { /* O jogo ainda não enviou um estado Codex válido. */ }
   });
   document.dispatchEvent(new Event("baiak-jarvis:codex-request"));
@@ -459,6 +461,39 @@
       || null;
   }
 
+  function lootPouchItem(cell) {
+    let compared = null;
+    try { compared = JSON.parse(cell.dataset.cmpitem || "null"); }
+    catch (_error) { /* Itens de material não possuem dados de equipamento. */ }
+    const firstLine = core.clean(cell.title.split("\n")[0]);
+    const display = firstLine.split(/\s+—/)[0].replace(/^[\d.,]+\s*x\s+/i, "").trim();
+    const rarity = display.match(/\s+\((Common|Uncommon|Rare|Epic|Legendary|Mythical|Comum|Incomum|Raro|Épico|Lendário|Mítico)\)$/i);
+    const tiers = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4, mythical: 5,
+      comum: 0, incomum: 1, raro: 2, epico: 3, lendario: 4, mitico: 5 };
+    const tier = Number.isFinite(compared?.tier) ? compared.tier : rarity ? tiers[core.normalizeLookup(rarity[1])] : 0;
+    let name = core.clean(compared?.name || cell.querySelector(":scope > img[alt]")?.alt
+      || (rarity ? display.slice(0, -rarity[0].length) : display));
+    if (!name && cell.dataset.tiphtml) {
+      const tooltip = new DOMParser().parseFromString(cell.dataset.tiphtml, "text/html");
+      name = core.clean(tooltip.querySelector(".tt-name")?.textContent).replace(/\s+\+\d+$/, "");
+    }
+    return { name, tier };
+  }
+
+  function renderLootCodexAuras() {
+    const grid = document.querySelector("#inv-grid");
+    if (!grid) return;
+    for (const cell of grid.children) {
+      if (!cell.classList.contains("cell")) continue;
+      const { name, tier } = lootPouchItem(cell);
+      const pending = settings.enabled && name ? core.codexItemNeeds(name, tier, codexItemCatalog, codexProgress) : null;
+      const needed = Boolean(pending?.length);
+      if (cell.classList.contains("bj-codex-needed") !== needed) cell.classList.toggle("bj-codex-needed", needed);
+      if (needed && cell.dataset.bjCodexMissing !== String(pending.length)) cell.dataset.bjCodexMissing = String(pending.length);
+      else if (!needed && cell.dataset.bjCodexMissing) delete cell.dataset.bjCodexMissing;
+    }
+  }
+
   function renderCodex() {
     const panel = host.querySelector("#bj-codex");
     if (!panel) return;
@@ -540,6 +575,7 @@
     maybeAutomate(snapshot).catch(() => {});
     renderBossRun();
     renderCodex();
+    renderLootCodexAuras();
   }
 
   function setAutoState(status, message) {
@@ -2255,6 +2291,7 @@
   function schedule() {
     if (timer) clearInterval(timer);
     host.classList.toggle("bj-hidden", !settings.enabled);
+    if (!settings.enabled) renderLootCodexAuras();
     host.classList.toggle("bj-minimized", settings.minimized);
     renderCodex();
     const minimizeButton = host.querySelector('[data-action="minimize"]');
