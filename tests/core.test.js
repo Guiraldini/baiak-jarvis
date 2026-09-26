@@ -61,6 +61,25 @@ assert.equal(snapshot.characters.length, 3);
 assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").level, 234);
 assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").role, "TANK");
 
+const activeParty = core.activePartyCharacters([
+  { name: "stz", vocation: "Knight", level: 470, skillLevel: 100 },
+  { name: "Mausz", vocation: "Druid", level: 437 },
+  { name: "Corre", vocation: "Knight", level: 74 },
+  { name: "Bate Corre", vocation: "Knight", level: 74 }
+], [
+  { name: "stz", vocation: "Knight", level: 470 },
+  { name: "Mausz", vocation: "Druid", level: 437 },
+  { name: "Bate Corre", vocation: "Knight", level: 74, role: "DPS" }
+]);
+assert.deepEqual(activeParty.map((character) => character.name), ["stz", "Mausz", "Bate Corre"]);
+assert.equal(activeParty[0].skillLevel, 100);
+assert.equal(activeParty[2].role, "DPS");
+assert.deepEqual(core.activePartyCharacters([{ name: "Corre" }], []), []);
+assert.equal(core.compareVersions("v0.8.18", "0.8.17"), 1);
+assert.equal(core.compareVersions("v0.8.17", "0.8.17"), 0);
+assert.equal(core.compareVersions("v0.8.16", "0.8.17"), -1);
+assert.equal(core.compareVersions("latest", "0.8.17"), null);
+
 const detectedKnight = core.findPartyKnight(snapshot, {
   Steelguard: { name: "Steelguard", vocation: "Knight", hp: 5000, protections: { earth: 4 } }
 });

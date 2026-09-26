@@ -2,6 +2,11 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.18
+
+- mostra apenas os personagens ativos listados no painel Party, evitando nomes extras capturados de outros textos do jogo;
+- ao clicar em **↻**, atualiza os dados e consulta a versão mais recente no GitHub; se houver versão nova, baixa o ZIP para instalação manual (ou abre Releases se o arquivo não estiver disponível).
+
 ## Versão 0.8.17
 
 - mostra os três personagens da Party em **Hunts → Próximos níveis**, com XP restante, XP média recebida por wave e waves estimadas para subir;
@@ -138,7 +143,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.17.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.18.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -149,7 +154,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.17.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.18.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -168,8 +173,9 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 ```powershell
 node .\tests\core.test.js
 node .\tests\codex.test.js
+node .\tests\background.test.js
 ```
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.17 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.18 AUTO · execução local`.

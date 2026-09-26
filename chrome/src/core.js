@@ -120,6 +120,34 @@
     return results;
   }
 
+  function activePartyCharacters(parsed, members) {
+    const parsedByName = new Map((Array.isArray(parsed) ? parsed : [])
+      .filter((character) => character?.name)
+      .map((character) => [normalizeLookup(character.name), character]));
+    const seen = new Set();
+    return (Array.isArray(members) ? members : []).flatMap((member) => {
+      const key = normalizeLookup(member?.name);
+      if (!key || seen.has(key)) return [];
+      seen.add(key);
+      const live = Object.fromEntries(Object.entries(member).filter(([, value]) => value != null));
+      return [{ ...parsedByName.get(key), ...live }];
+    });
+  }
+
+  function compareVersions(first, second) {
+    const parse = (value) => {
+      const match = String(value || "").trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/i);
+      return match ? match.slice(1).map((part) => Number(part || 0)) : null;
+    };
+    const left = parse(first);
+    const right = parse(second);
+    if (!left || !right) return null;
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) return left[index] > right[index] ? 1 : -1;
+    }
+    return 0;
+  }
+
   function parseSlots(text, heading, nextHeadings) {
     const source = section(text, heading, nextHeadings);
     const match = source.match(/Slots\s*(\d+)\s*\/\s*(\d+)/i);
@@ -773,6 +801,8 @@
     relativeDifference,
     parseVitalBar,
     parseSnapshot,
+    activePartyCharacters,
+    compareVersions,
     compareKnightToStage,
     buildBalanceAdvice,
     findPartyKnight,

@@ -13,3 +13,4 @@ jobs:
         with:
           node-version: 20
       - run: node tests/core.test.js
+      - run: node tests/background.test.js

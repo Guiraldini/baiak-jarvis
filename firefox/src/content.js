@@ -76,7 +76,7 @@
       <div><strong><span class="bj-pulse"></span> JARVIS</strong></div>
       <div class="bj-actions">
         <button type="button" data-action="toggle-codex" title="Mostrar ou ocultar Codex" aria-label="Mostrar ou ocultar Codex">C</button>
-        <button type="button" data-action="refresh" title="Atualizar agora">↻</button>
+        <button type="button" data-action="refresh" title="Atualizar dados e verificar versão no GitHub">↻</button>
         <button type="button" data-action="minimize" title="Minimizar">−</button>
       </div>
     </header>
@@ -248,16 +248,6 @@
     }).filter(Boolean);
   }
 
-  function mergeCharacters(parsed, structural) {
-    const result = [...parsed];
-    for (const character of structural) {
-      const existing = result.find((item) => core.normalizeLookup(item.name) === core.normalizeLookup(character.name));
-      if (existing) Object.assign(existing, Object.fromEntries(Object.entries(character).filter(([, value]) => value != null)));
-      else result.push(character);
-    }
-    return result;
-  }
-
   function readSnapshot() {
     const gameRoot = document.querySelector("#app") || document.body;
     const location = (document.querySelector("#wave-title")?.textContent || "").replace(/▾/g, "");
@@ -271,7 +261,7 @@
       if (bonus != null) knownStaminaMaxMinutes = 42 * 60 + bonus;
     }
     if (snapshot.stamina) snapshot.stamina.maxMinutes = knownStaminaMaxMinutes;
-    snapshot.characters = mergeCharacters(snapshot.characters, readPartyCharacters());
+    snapshot.characters = core.activePartyCharacters(snapshot.characters, readPartyCharacters());
     return snapshot;
   }
 
@@ -1957,14 +1947,30 @@
     await ext.storage.local.set({ bjHistory: history, bjLatest: core.compactHistory(snapshot), bjProfiles: profiles });
   }
 
+  async function checkGitHubUpdate() {
+    const release = await ext.runtime.sendMessage({ type: "bj:latest-release" });
+    if (!release?.ok) throw new Error(release?.error || "Não foi possível consultar o GitHub.");
+    const comparison = core.compareVersions(release.version, extensionVersion);
+    if (comparison == null) throw new Error("Versão do GitHub não reconhecida.");
+    if (comparison <= 0) return null;
+    if (release.downloadUrl) {
+      const downloaded = await ext.runtime.sendMessage({ type: "bj:download-release", url: release.downloadUrl });
+      if (downloaded?.ok) return { version: release.version, action: "downloaded" };
+    }
+    const opened = await ext.runtime.sendMessage({ type: "bj:open-release" });
+    if (!opened?.ok) throw new Error(opened?.error || "Não foi possível abrir o GitHub.");
+    return { version: release.version, action: "opened" };
+  }
+
   async function refreshAll() {
     if (refreshBusy) return;
     refreshBusy = true;
     const button = host.querySelector('[data-action="refresh"]');
     button.disabled = true;
     button.textContent = "…";
-    button.title = "Atualizando Party, Skills, Hunts e análise";
-    setAutoState("working", "Atualizando Party, equipamentos, lista de Hunts e análise…");
+    button.title = "Atualizando dados e verificando o GitHub";
+    setAutoState("working", "Atualizando dados e verificando se há nova versão…");
+    let gameError = null;
     try {
       latestSnapshot = readSnapshot();
       await scanSkillsPanel(true);
@@ -1976,13 +1982,20 @@
       render(latestSnapshot);
       lastHistoryAt = 0;
       await saveHistory(latestSnapshot);
-      setAutoState("success", "Party, equipamentos, Hunts e análise atualizados agora.");
     } catch (error) {
-      setAutoState("error", `Atualização incompleta: ${error.message}`);
+      gameError = error.message;
+    }
+    try {
+      const update = await checkGitHubUpdate();
+      if (update) setAutoState(gameError ? "error" : "success", `Versão ${update.version} disponível: ${update.action === "downloaded" ? "ZIP baixado na pasta Downloads" : "página do GitHub aberta"}.${gameError ? ` Dados do jogo incompletos: ${gameError}` : ""}`);
+      else if (gameError) setAutoState("error", `Atualização dos dados incompleta: ${gameError}. Jarvis ${extensionVersion} já é a versão mais recente.`);
+      else setAutoState("success", `Dados atualizados. Jarvis ${extensionVersion} já é a versão mais recente.`);
+    } catch (error) {
+      setAutoState("error", `${gameError ? `Dados do jogo incompletos: ${gameError}. ` : "Dados do jogo atualizados. "}GitHub: ${error.message}`);
     } finally {
       button.disabled = false;
       button.textContent = "↻";
-      button.title = "Atualizar agora";
+      button.title = "Atualizar dados e verificar versão no GitHub";
       refreshBusy = false;
     }
   }

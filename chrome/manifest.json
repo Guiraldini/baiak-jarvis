@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Baiak Jarvis AUTO",
-  "version": "0.8.17",
+  "version": "0.8.18",
   "description": "Copiloto local para stamina, treino em casa, hunts, Codex, sets e chefes favoritos no Baiak Idle.",
-  "permissions": ["storage", "activeTab", "tabs", "alarms"],
+  "permissions": ["storage", "activeTab", "tabs", "alarms", "downloads"],
   "host_permissions": [
     "https://baiakidle.com/*",
     "https://www.baiakidle.com/*",
-    "https://guiabaiakidle.com/*"
+    "https://guiabaiakidle.com/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "src/background.js"
