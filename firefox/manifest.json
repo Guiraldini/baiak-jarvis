@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Baiak Jarvis AUTO",
-  "version": "0.8.12",
-  "description": "Copiloto local para stamina, hunts, sets e run de chefes favoritos no Baiak Idle.",
+  "version": "0.8.13",
+  "description": "Copiloto local para stamina, hunts, Codex, sets e run de chefes favoritos no Baiak Idle.",
   "permissions": ["storage", "activeTab", "tabs", "alarms"],
   "host_permissions": [
     "https://baiakidle.com/*",
@@ -25,7 +25,16 @@
         "https://baiakidle.com/jogar/*",
         "https://www.baiakidle.com/jogar/*"
       ],
-      "js": ["src/equipment-catalog.js", "src/core.js", "src/content.js"],
+      "js": ["src/codex-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://baiakidle.com/jogar/*",
+        "https://www.baiakidle.com/jogar/*"
+      ],
+      "js": ["src/equipment-catalog.js", "src/codex-catalog.js", "src/core.js", "src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"
     }

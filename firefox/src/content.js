@@ -6,6 +6,7 @@
   const ext = globalThis.browser || globalThis.chrome;
   const core = globalThis.BaiakJarvisCore;
   const equipmentCatalog = globalThis.BaiakJarvisEquipmentCatalog || { items: [], capturedAt: null };
+  const codexCatalog = globalThis.BaiakJarvisCodexCatalog || [];
   const extensionVersion = ext.runtime.getManifest().version;
   const defaults = {
     enabled: true,
@@ -17,6 +18,8 @@
     automationEnabled: true,
     autoReload: true,
     huntName: "Cobras",
+    codexVisible: true,
+    codexHuntId: "",
     activeView: "dashboard"
   };
   let settings = { ...defaults };
@@ -43,6 +46,10 @@
   let selectedHuntKey = null;
   let selectedSetCharacter = null;
   let knownStaminaMaxMinutes = 42 * 60;
+  let codexProgress = null;
+  let lastCodexHuntId = "";
+  let lastCodexRender = "";
+  let codexExpandedTier = -1;
   const bossRun = {
     running: false, inFight: false, loopBusy: false, status: "idle", current: null,
     message: "Pronto para enfrentar os chefes favoritos disponíveis.",
@@ -55,10 +62,16 @@
     <header class="bj-header">
       <div><strong><span class="bj-pulse"></span> JARVIS</strong></div>
       <div class="bj-actions">
+        <button type="button" data-action="toggle-codex" title="Mostrar ou ocultar Codex" aria-label="Mostrar ou ocultar Codex">C</button>
         <button type="button" data-action="refresh" title="Atualizar agora">↻</button>
         <button type="button" data-action="minimize" title="Minimizar">−</button>
       </div>
     </header>
+    <section class="bj-codex" id="bj-codex">
+      <div class="bj-codex-head"><strong>CODEX DA HUNT</strong><span id="bj-codex-state">Aguardando o jogo</span></div>
+      <label class="bj-codex-choice"><span>Missão</span><select id="bj-codex-select" title="Escolher hunt do Codex"></select></label>
+      <div id="bj-codex-missions"></div>
+    </section>
     <div class="bj-body">
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
@@ -144,6 +157,20 @@
       <footer>Jarvis ${extensionVersion} AUTO · execução local</footer>
     </div>`;
   document.documentElement.appendChild(host);
+
+  const codexSelect = host.querySelector("#bj-codex-select");
+  codexSelect.innerHTML = `<option value="">Hunt atual (automático)</option>${codexCatalog.map((hunt) =>
+    `<option value="${escapeHtml(hunt.id)}">${escapeHtml(hunt.name)}</option>`).join("")}`;
+  document.addEventListener("baiak-jarvis:codex", (event) => {
+    try {
+      const payload = JSON.parse(event.detail);
+      if (!Array.isArray(payload.done) || !payload.prog || typeof payload.prog !== "object") return;
+      codexProgress = payload;
+      lastCodexRender = "";
+      renderCodex();
+    } catch (_error) { /* O jogo ainda não enviou um estado Codex válido. */ }
+  });
+  document.dispatchEvent(new Event("baiak-jarvis:codex-request"));
 
   function detectLoop() {
     const element = document.querySelector("#loop-toggle");
@@ -385,6 +412,66 @@
     return ({ physical: "Físico", earth: "Terra", death: "Morte", fire: "Fogo", ice: "Gelo", energy: "Energia", holy: "Sagrado" })[element] || element;
   }
 
+  function findCodexHunt(value) {
+    const name = core.normalizeLookup(value);
+    if (!name) return null;
+    return codexCatalog.find((hunt) => core.normalizeLookup(hunt.name) === name)
+      || codexCatalog.find((hunt) => name.startsWith(core.normalizeLookup(hunt.name) + " "))
+      || null;
+  }
+
+  function renderCodex() {
+    const panel = host.querySelector("#bj-codex");
+    if (!panel) return;
+    panel.hidden = !settings.codexVisible;
+    host.classList.toggle("bj-codex-visible", settings.codexVisible);
+    const toggle = host.querySelector('[data-action="toggle-codex"]');
+    toggle.setAttribute("aria-pressed", String(settings.codexVisible));
+    toggle.title = settings.codexVisible ? "Ocultar Codex" : "Mostrar Codex";
+    if (!settings.codexVisible) return;
+    const current = findCodexHunt(latestSnapshot?.location);
+    if (current && current.id !== lastCodexHuntId) {
+      lastCodexHuntId = current.id;
+      if (!settings.codexHuntId) codexExpandedTier = -1;
+    }
+    const hunt = codexCatalog.find((item) => item.id === settings.codexHuntId)
+      || codexCatalog.find((item) => item.id === lastCodexHuntId)
+      || findCodexHunt(settings.huntName) || codexCatalog[0];
+    const select = host.querySelector("#bj-codex-select");
+    select.value = settings.codexHuntId || "";
+    const state = host.querySelector("#bj-codex-state");
+    if (!hunt) {
+      state.textContent = "Catálogo indisponível";
+      return;
+    }
+    state.textContent = codexProgress ? "Em tempo real" : "Aguardando progresso";
+    const rows = [1, 2, 3].map((tier) => {
+      const id = `hunt-${hunt.id}${tier === 1 ? "" : `-${tier}`}`;
+      const quantities = hunt.req.map((entry) => entry.qty * (tier === 1 ? 1 : tier === 2 ? 5 : 15));
+      const counts = codexProgress?.prog[id] || [];
+      const done = codexProgress?.done.includes(id) || false;
+      const total = quantities.reduce((sum, value) => sum + value, 0);
+      const collected = quantities.reduce((sum, value, index) => sum + Math.min(value, counts[index] || 0), 0);
+      return { id, tier, done, counts, quantities, percent: done ? 100 : total ? Math.round(collected / total * 100) : 0,
+        ready: !done && codexProgress && quantities.every((value, index) => (counts[index] || 0) >= value) };
+    });
+    if (codexExpandedTier < 1 || codexExpandedTier > 3) codexExpandedTier = rows.find((row) => !row.done)?.tier || 3;
+    const signature = `${hunt.id}|${codexExpandedTier}|${Boolean(codexProgress)}`;
+    if (signature === lastCodexRender) return;
+    lastCodexRender = signature;
+    host.querySelector("#bj-codex-missions").innerHTML = `
+      <div class="bj-codex-mission-title">Domínio: ${escapeHtml(hunt.name)}</div>
+      <div class="bj-codex-tiers">${rows.map((row) => `
+        <button type="button" data-action="codex-tier" data-tier="${row.tier}" aria-pressed="${row.tier === codexExpandedTier}">
+          ${["", "I", "II", "III"][row.tier]} <b>${codexProgress ? `${row.percent}%` : "—"}</b>
+        </button>`).join("")}</div>
+      ${rows.filter((row) => row.tier === codexExpandedTier).map((row) => `
+        <div class="bj-codex-bar"><i style="width:${row.percent}%"></i></div>
+        <div class="bj-codex-status">${!codexProgress ? "Aguardando dados da conta" : row.done ? "Concluído" : row.ready ? "Pronto para entregar no jogo" : `${row.percent}% dos itens entregues`}</div>
+        <div class="bj-codex-items">${hunt.req.map((entry, index) => `
+          <div class="bj-codex-item"><span title="${escapeHtml(entry.item)}">${escapeHtml(entry.item)}</span><b>${codexProgress ? formatNumber(row.done ? row.quantities[index] : Math.min(row.quantities[index], row.counts[index] || 0)) : "—"}/${formatNumber(row.quantities[index])}</b></div>`).join("")}</div>`).join("")}`;
+  }
+
   function render(snapshot) {
     mergeLiveProfiles(snapshot);
     host.querySelector("#bj-location").textContent = snapshot.location || snapshot.activity || "Baiak Idle";
@@ -412,6 +499,7 @@
     maybeLoadStage(snapshot.location).catch(() => {});
     maybeAutomate(snapshot).catch(() => {});
     renderBossRun();
+    renderCodex();
   }
 
   function setAutoState(status, message) {
@@ -1553,6 +1641,7 @@
     if (timer) clearInterval(timer);
     host.classList.toggle("bj-hidden", !settings.enabled);
     host.classList.toggle("bj-minimized", settings.minimized);
+    renderCodex();
     const minimizeButton = host.querySelector('[data-action="minimize"]');
     minimizeButton.textContent = settings.minimized ? "+" : "−";
     minimizeButton.title = settings.minimized ? "Expandir" : "Minimizar";
@@ -1574,6 +1663,18 @@
     }
     const action = event.target.closest("button")?.dataset.action;
     if (action === "refresh") refreshAll();
+    if (action === "toggle-codex") {
+      settings.codexVisible = !settings.codexVisible;
+      renderCodex();
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
+    if (action === "codex-tier") {
+      codexExpandedTier = Number(event.target.closest("button").dataset.tier);
+      lastCodexRender = "";
+      renderCodex();
+      return;
+    }
     if (action === "toggle-automation") {
       settings.automationEnabled = !settings.automationEnabled;
       renderAutomationStatus();
@@ -1622,6 +1723,14 @@
   });
 
   host.addEventListener("change", async (event) => {
+    if (event.target.id === "bj-codex-select") {
+      settings.codexHuntId = event.target.value;
+      codexExpandedTier = -1;
+      lastCodexRender = "";
+      renderCodex();
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
     if (event.target.id === "bj-set-objective") {
       settings.objective = event.target.value;
       await ext.storage.local.set({ bjSettings: settings });
