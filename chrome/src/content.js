@@ -855,6 +855,43 @@
     return cells.length === 1 ? cells[0] : null;
   }
 
+  async function chooseFavoriteBoss(modal) {
+    let cards = [];
+    let charges = null;
+    let decision = { type: "stop", reason: "no-favorites" };
+    for (let attempt = 0; attempt < 24 && bossRun.running; attempt += 1) {
+      cards = readFavoriteBossCards(modal);
+      charges = readBossCharges(modal);
+      decision = core.bossRunDecision(cards, bossRun.attempted, charges?.left);
+      if (decision.type === "fight" || decision.reason === "ambiguous-boss" || decision.reason === "no-charges") break;
+      await delay(250);
+    }
+    return { cards, charges, decision };
+  }
+
+  async function waitForBossButton(modal, name) {
+    let readyButton = null;
+    let readySince = 0;
+    for (let attempt = 0; attempt < 24 && bossRun.running; attempt += 1) {
+      const cell = findBossCell(modal, name);
+      if (cell && !cell.classList.contains("expanded")) cell.click();
+      const button = cell?.querySelector(".boss-cell-go");
+      if (cell?.classList.contains("expanded") && cell.querySelector(".boss-cell-fav.on")
+        && isVisible(button) && !button.disabled && readBossCharges(modal)?.left > 0) {
+        if (readyButton !== button) {
+          readyButton = button;
+          readySince = Date.now();
+        }
+        if (Date.now() - readySince >= 500) return button;
+      } else {
+        readyButton = null;
+      }
+      await delay(250);
+    }
+    if (!bossRun.running) return null;
+    throw new Error(`O botão Enfrentar de ${name} não ficou disponível no jogo.`);
+  }
+
   async function waitForBossEntry(name) {
     const started = Date.now();
     while (Date.now() - started < 20000) {
@@ -983,17 +1020,20 @@
         const xpBefore = await readBossPartyXp().catch(() => ({}));
         const modal = await openBossPicker();
         if (!bossRun.running) break;
-        const charges = readBossCharges(modal);
+        const { cards, charges, decision } = await chooseFavoriteBoss(modal);
+        if (!bossRun.running) break;
         if (!charges) throw new Error("Não consegui ler as cargas de boss; nenhuma luta será iniciada.");
         bossRun.charges = charges.left;
         bossRun.maxCharges = charges.max;
-        const cards = readFavoriteBossCards(modal);
-        const decision = core.bossRunDecision(cards, bossRun.attempted, charges.left);
         if (decision.type === "stop") {
+          const remaining = cards.filter((card) => card.favorite
+            && !bossRun.attempted.some((name) => core.normalizeLookup(name) === core.normalizeLookup(card.name)));
           const messages = {
             "no-charges": "Cargas esgotadas. A run terminou.",
             "no-favorites": "Não há chefes marcados como favoritos.",
-            "none-ready": "Todos os favoritos disponíveis foram enfrentados ou estão em recarga.",
+            "none-ready": remaining.length
+              ? `${remaining.length} favorito${remaining.length === 1 ? " restante está" : "s restantes estão"} sem o botão Enfrentar habilitado no jogo.`
+              : "Todos os favoritos disponíveis foram enfrentados ou estão em recarga.",
             "ambiguous-boss": "Há chefes com nomes iguais na lista. A run parou para evitar um clique errado.",
             "charges-unknown": "Não consegui confirmar as cargas de boss."
           };
@@ -1005,19 +1045,7 @@
         bossRun.current = name;
         bossRun.phase = "choosing";
         setBossRunState("running", `Abrindo ${name}…`);
-        let cell = findBossCell(modal, name);
-        if (!cell) throw new Error(`Não consegui identificar o card de ${name}.`);
-        if (!cell.classList.contains("expanded")) cell.click();
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          cell = findBossCell(modal, name);
-          if (cell?.classList.contains("expanded") && isVisible(cell.querySelector(".boss-cell-go"))) break;
-          await delay(100);
-        }
-        const button = cell?.querySelector(".boss-cell-go");
-        if (!cell?.classList.contains("expanded") || !cell.querySelector(".boss-cell-fav.on")
-          || !isVisible(button) || button.disabled || readBossCharges(modal)?.left <= 0) {
-          throw new Error(`O botão Enfrentar de ${name} não está disponível.`);
-        }
+        const button = await waitForBossButton(modal, name);
         if (!bossRun.running) break;
         const previous = cards.find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
         bossRun.inFight = true;
