@@ -1,5 +1,29 @@
 const assert = require("node:assert/strict");
 const core = require("../chrome/src/core.js");
+require("../chrome/src/equipment-catalog.js");
+const equipmentCatalog = globalThis.BaiakJarvisEquipmentCatalog;
+assert.ok(equipmentCatalog.items.length > 1500);
+const deeplingFork = equipmentCatalog.items.find((item) => item.name === "deepling fork");
+const lionSpellbook = equipmentCatalog.items.find((item) => item.name === "lion spellbook");
+assert.equal(core.canEquipCatalogItem(deeplingFork, { vocation: "Druid", level: 229 }), false);
+assert.equal(core.canEquipCatalogItem(deeplingFork, { vocation: "Druid", level: 230 }), true);
+assert.equal(core.canEquipCatalogItem(deeplingFork, { vocation: "Knight", level: 500 }), false);
+assert.equal(core.canEquipCatalogItem(lionSpellbook, { vocation: "Druid", level: 230 }), true);
+const druidSet = core.equipmentRecommendations({
+  vocation: "Druid", level: 230, equipment: [{ name: "Deepling Fork" }]
+}, equipmentCatalog.items);
+assert.equal(druidSet.pair.weapon.name, "deepling fork");
+assert.equal(druidSet.pair.offhand.name, "lion spellbook");
+assert.equal(druidSet.slots.find((entry) => entry.slot === "shield").best.name, "lion spellbook");
+assert.equal(druidSet.slots.find((entry) => entry.slot === "weapon").equipped.name, "deepling fork");
+const twoHandSet = core.equipmentRecommendations({ vocation: "Druid", level: 230 }, [
+  { name: "one hand", slot: "weapon", wt: "wand", level: 100, wandMin: 80, wandMax: 100 },
+  { name: "two hands", slot: "weapon", wt: "wand", level: 100, twoHanded: true, wandMin: 900, wandMax: 1000 },
+  { name: "book", slot: "shield", level: 100, skills: { magic: 4 } }
+]);
+assert.equal(twoHandSet.pair.weapon.name, "two hands");
+assert.equal(twoHandSet.pair.offhand, null);
+assert.equal(twoHandSet.slots.some((entry) => entry.slot === "shield"), false);
 
 const fixture = `
 BAIAK IDLE NatureMage 74.774.148

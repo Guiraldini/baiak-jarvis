@@ -398,6 +398,91 @@
       .trim();
   }
 
+  function canEquipCatalogItem(item, profile) {
+    const vocation = normalizeLookup(profile?.vocation);
+    const level = Number(profile?.level);
+    if (!vocation || !Number.isFinite(level) || level < 1 || !item?.slot) return false;
+    if (Number(item.level || 0) > level) return false;
+    if (Array.isArray(item.vocs) && item.vocs.length && !item.vocs.some((allowed) => normalizeLookup(allowed) === vocation)) return false;
+    if (item.durationSec || item.charges) return false;
+    if (item.slot === "ammo") return vocation === "paladin";
+    if (item.slot !== "weapon") return true;
+    const types = {
+      knight: ["sword", "axe", "club"],
+      druid: ["wand"], sorcerer: ["wand"],
+      paladin: ["distance"], monk: ["fist"]
+    };
+    return Boolean(types[vocation]?.includes(item.wt));
+  }
+
+  function catalogItemScore(item, profile, objective = "balanced", priorityElements = []) {
+    const vocation = normalizeLookup(profile?.vocation);
+    const skills = item.skills || {};
+    const primarySkill = vocation === "druid" || vocation === "sorcerer" ? Number(skills.magic || 0)
+      : vocation === "knight" ? Math.max(Number(skills.sword || 0), Number(skills.axe || 0), Number(skills.club || 0))
+        : vocation === "paladin" ? Number(skills.distance || 0) : Number(skills.fist || 0);
+    const wandAverage = (Number(item.wandMin || 0) + Number(item.wandMax || 0)) / 2;
+    const weaponPower = vocation === "druid" || vocation === "sorcerer"
+      ? wandAverage * 0.2 + (item.manaShot ? wandAverage / Number(item.manaShot) * 10 : 0)
+      : Number(item.atk || 0) * 1.35;
+    const magicElements = Object.values(item.magicEl || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+    const elementAttack = typeof item.elementAtk === "object"
+      ? Object.values(item.elementAtk).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0)
+      : Number(item.elementAtk || 0);
+    const offensive = primarySkill * 14 + weaponPower + magicElements * 2
+      + Number(item.critChance || 0) * 2 + Number(item.critDmg || 0) * 0.6
+      + elementAttack * 0.4 + Number(item.hitChance || 0) * 0.5;
+    const protection = Object.entries(item.absorb || {}).reduce((sum, [element, value]) => {
+      const weight = priorityElements.includes(element) ? 2.5 : 1.4;
+      return sum + (Number(value) || 0) * weight;
+    }, 0);
+    const defensive = Number(item.arm || 0) * 1.5 + Number(item.def || 0) * 0.4
+      + protection + Number(item.lifeLeech || 0) * 0.5 + Number(item.manaLeech || 0) * 0.3
+      + Number(item.moveSpeed || 0) * 0.4;
+    const weights = objective === "xp" ? [1.5, 0.5] : objective === "safety" ? [0.55, 1.5] : [1, 1];
+    return offensive * weights[0] + defensive * weights[1];
+  }
+
+  function equipmentRecommendations(profile, catalog, objective = "balanced", priorityElements = []) {
+    const entries = Array.isArray(catalog) ? catalog : [];
+    const eligible = entries.filter((item) => canEquipCatalogItem(item, profile));
+    const rank = (items) => [...items].sort((a, b) =>
+      catalogItemScore(b, profile, objective, priorityElements) - catalogItemScore(a, profile, objective, priorityElements)
+      || Number(b.level || 0) - Number(a.level || 0) || a.name.localeCompare(b.name));
+    const bySlot = (slot) => rank(eligible.filter((item) => item.slot === slot));
+    const offhands = bySlot("shield");
+    const ammunition = bySlot("ammo");
+    const weapons = bySlot("weapon");
+    const pairs = weapons.map((weapon) => {
+      const offhand = weapon.twoHanded ? null : offhands[0] || null;
+      const ammo = weapon.ammoType ? ammunition.find((item) => item.ammoType === weapon.ammoType) || null : null;
+      return {
+        weapon, offhand, ammo,
+        score: catalogItemScore(weapon, profile, objective, priorityElements)
+          + (offhand ? catalogItemScore(offhand, profile, objective, priorityElements) : 0)
+          + (ammo ? catalogItemScore(ammo, profile, objective, priorityElements) : 0)
+      };
+    }).sort((a, b) => b.score - a.score || a.weapon.name.localeCompare(b.weapon.name));
+    const pair = pairs[0] || null;
+    const equipped = new Map();
+    const known = new Map(entries.map((item) => [normalizeLookup(item.name), item]));
+    for (const worn of profile?.equipment || []) {
+      const item = known.get(normalizeLookup(worn.name));
+      if (item?.slot && !equipped.has(item.slot)) equipped.set(item.slot, item);
+    }
+    const slots = ["weapon", "shield", "ammo", "helmet", "armor", "legs", "boots", "amulet", "ring"]
+      .filter((slot) => slot !== "shield" || (pair && !pair.weapon.twoHanded))
+      .filter((slot) => slot !== "ammo" || (pair && pair.weapon.ammoType))
+      .map((slot) => {
+        const ranked = slot === "weapon" ? pairs.map((candidate) => candidate.weapon)
+          : slot === "ammo" ? bySlot(slot).filter((item) => item.ammoType === pair.weapon.ammoType) : bySlot(slot);
+        const best = slot === "weapon" ? pair?.weapon || null : slot === "shield" ? pair?.offhand || null
+          : slot === "ammo" ? pair?.ammo || null : ranked[0] || null;
+        return { slot, best, equipped: equipped.get(slot) || null, alternatives: ranked.filter((item) => item !== best).slice(0, 2) };
+      });
+    return { slots, eligibleCount: eligible.length, pair };
+  }
+
   function catalogStageFromCells(cells) {
     if (!Array.isArray(cells) || cells.length < 4) return null;
     const values = cells.map(clean);
@@ -627,6 +712,9 @@
     dailyHuntXp,
     elapsedToSeconds,
     elementMentions,
+    canEquipCatalogItem,
+    catalogItemScore,
+    equipmentRecommendations,
     formatMinutes,
     huntRunTransition,
     mountStaminaBonusMinutes,

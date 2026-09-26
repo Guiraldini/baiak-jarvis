@@ -5,6 +5,7 @@
 
   const ext = globalThis.browser || globalThis.chrome;
   const core = globalThis.BaiakJarvisCore;
+  const equipmentCatalog = globalThis.BaiakJarvisEquipmentCatalog || { items: [], capturedAt: null };
   const extensionVersion = ext.runtime.getManifest().version;
   const defaults = {
     enabled: true,
@@ -40,13 +41,14 @@
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
   let selectedHuntKey = null;
+  let selectedSetCharacter = null;
   let knownStaminaMaxMinutes = 42 * 60;
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
   host.innerHTML = `
     <header class="bj-header">
-      <div><strong><span class="bj-pulse"></span> JARVIS</strong><small>stamina · party · builds</small></div>
+      <div><strong><span class="bj-pulse"></span> JARVIS</strong></div>
       <div class="bj-actions">
         <button type="button" data-action="refresh" title="Atualizar agora">↻</button>
         <button type="button" data-action="minimize" title="Minimizar">−</button>
@@ -56,6 +58,7 @@
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
         <button type="button" data-action="view-hunts" aria-selected="false">Hunts</button>
+        <button type="button" data-action="view-sets" aria-selected="false">Sets</button>
         <button type="button" data-action="view-optimizer" aria-selected="false">Otimizador</button>
       </nav>
       <section class="bj-view" id="bj-view-dashboard">
@@ -101,6 +104,14 @@
           <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
           <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
           <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
+        </div>
+      </section>
+      <section class="bj-view bj-view-hidden" id="bj-view-sets">
+        <div class="bj-sets-view">
+          <div class="bj-sets-heading"><div><strong>SETS POR PERSONAGEM</strong><small>Nível e equipamentos lidos da Party e do painel Skills.</small></div><label>Prioridade <select id="bj-set-objective"><option value="balanced">Equilíbrio</option><option value="xp">Dano / XP</option><option value="safety">Sobrevivência</option></select></label></div>
+          <div id="bj-set-members" class="bj-set-members"></div>
+          <div id="bj-set-results"></div>
+          <p class="bj-set-source">Candidatos do <a href="https://baiakidle.com/jogar/" target="_blank" rel="noreferrer">catálogo do jogo</a> · ${escapeHtml(equipmentCatalog.capturedAt || "data indisponível")}. A recomendação considera atributos base e compatibilidade; disponibilidade, imbuements e DPS real precisam ser confirmados no jogo. Itens com duração ou cargas ficam fora do ranking.</p>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-optimizer">
@@ -286,6 +297,7 @@
       }
       lastSkillsScanAt = Date.now();
       if (latestSnapshot) renderProfiles(latestSnapshot);
+      renderSets();
     } finally {
       skillsScanBusy = false;
     }
@@ -367,6 +379,7 @@
     renderAutomationStatus();
     renderHuntOptions();
     renderProfiles(snapshot);
+    renderSets();
     monitorHuntRun(snapshot);
     renderHuntHistory();
 
@@ -413,18 +426,21 @@
   }
 
   async function switchView(view, persist = false) {
-    const selected = ["dashboard", "hunts", "optimizer"].includes(view) ? view : "dashboard";
+    const selected = ["dashboard", "hunts", "sets", "optimizer"].includes(view) ? view : "dashboard";
     host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
     host.querySelector("#bj-view-hunts").classList.toggle("bj-view-hidden", selected !== "hunts");
+    host.querySelector("#bj-view-sets").classList.toggle("bj-view-hidden", selected !== "sets");
     host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
     host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
     host.querySelector('[data-action="view-hunts"]').setAttribute("aria-selected", String(selected === "hunts"));
+    host.querySelector('[data-action="view-sets"]').setAttribute("aria-selected", String(selected === "sets"));
     host.querySelector('[data-action="view-optimizer"]').setAttribute("aria-selected", String(selected === "optimizer"));
     if (selected === "optimizer") {
       const frame = host.querySelector("#bj-optimizer-frame");
       if (!frame.getAttribute("src")) frame.src = frame.dataset.src;
     }
     settings.activeView = selected;
+    if (selected === "sets") renderSets();
     if (persist) await ext.storage.local.set({ bjSettings: settings });
   }
 
@@ -688,6 +704,72 @@
         ${equipment ? `<details class="bj-profile-details" data-detail="equipment"${equipmentOpen}><summary>Equipamentos (${profile.equipment.length})</summary><ul class="bj-equipment-list">${equipment}</ul></details>` : ""}
       </article>`;
     }).join("");
+  }
+
+  function setItemFacts(item, vocation) {
+    const facts = [];
+    if (item.twoHanded) facts.push("2 mãos");
+    if (Number.isFinite(item.wandMin) && Number.isFinite(item.wandMax)) facts.push(`Dano mágico ${item.wandMin}–${item.wandMax}`);
+    if (Number.isFinite(item.atk)) facts.push(`Ataque ${item.atk}`);
+    if (Number.isFinite(item.arm)) facts.push(`Armor ${item.arm}`);
+    if (Number.isFinite(item.def)) facts.push(`Defesa ${item.def}`);
+    const skillKeys = vocation === "Knight" ? ["sword", "axe", "club", "shielding"]
+      : vocation === "Paladin" ? ["distance", "magic"] : vocation === "Monk" ? ["fist", "magic"] : ["magic"];
+    for (const skill of skillKeys) {
+      if (item.skills?.[skill]) facts.push(`${skill === "magic" ? "ML" : skill} +${item.skills[skill]}`);
+    }
+    if (item.critChance) facts.push(`Crítico +${item.critChance}%`);
+    if (item.critDmg) facts.push(`Dano crítico +${item.critDmg}%`);
+    for (const [element, amount] of Object.entries(item.absorb || {})) {
+      facts.push(`${elementLabel(element)} ${amount >= 0 ? "+" : ""}${amount}%`);
+    }
+    if (item.imbSlots) facts.push(`${item.imbSlots} slot${item.imbSlots === 1 ? "" : "s"} de imbuement`);
+    return facts.join(" · ") || "Atributos não detalhados no catálogo.";
+  }
+
+  function renderSets() {
+    const view = host.querySelector("#bj-view-sets");
+    if (!view || view.classList.contains("bj-view-hidden")) return;
+    const membersTarget = host.querySelector("#bj-set-members");
+    const target = host.querySelector("#bj-set-results");
+    const members = [...new Map((latestSnapshot?.characters || []).map((character) => [core.normalizeLookup(character.name), profiles[character.name] || character])).values()];
+    if (!members.length) {
+      membersTarget.innerHTML = "";
+      target.innerHTML = '<div class="bj-stage-status">Aguardando os personagens aparecerem na Party.</div>';
+      return;
+    }
+    if (!equipmentCatalog.items.length) {
+      target.innerHTML = '<div class="bj-stage-status bj-error">Catálogo de equipamentos indisponível nesta instalação.</div>';
+      return;
+    }
+    if (!members.some((member) => member.name === selectedSetCharacter)) selectedSetCharacter = members[0].name;
+    const profile = members.find((member) => member.name === selectedSetCharacter);
+    const objective = ["xp", "safety"].includes(settings.objective) ? settings.objective : "balanced";
+    host.querySelector("#bj-set-objective").value = objective;
+    const focus = stageState.data?.catalogOnly ? "" : stageState.data?.focus || "";
+    const priorityElements = core.elementMentions(focus.split(/\b(?:dano|damage|ataque|attack)\b/i)[0]);
+    const signature = JSON.stringify({ members: members.map((member) => [member.name, member.level, member.vocation]), selectedSetCharacter, objective, priorityElements, equipment: (profile.equipment || []).map((item) => item.name) });
+    if (target.dataset.signature === signature) return;
+    target.dataset.signature = signature;
+    membersTarget.innerHTML = members.map((member) => `<button type="button" data-action="select-set-character" data-name="${escapeHtml(member.name)}" aria-pressed="${member.name === selectedSetCharacter}">${escapeHtml(member.name)} <small>Nv. ${escapeHtml(member.level || "—")} · ${escapeHtml(member.vocation || "—")}</small></button>`).join("");
+    if (!Number.isFinite(Number(profile.level)) || !profile.level || !profile.vocation) {
+      target.innerHTML = '<div class="bj-stage-status">Aguardando leitura de nível e vocação deste personagem.</div>';
+      return;
+    }
+    const result = core.equipmentRecommendations(profile, equipmentCatalog.items, objective, priorityElements);
+    const slotLabels = { weapon: "Arma", shield: "Mão secundária", ammo: "Munição", helmet: "Helmet", armor: "Armor", legs: "Legs", boots: "Boots", amulet: "Amulet", ring: "Ring" };
+    const pair = result.pair;
+    target.innerHTML = `
+      <div class="bj-set-intro"><strong>${escapeHtml(profile.name)} · ${escapeHtml(profile.vocation)} · Nv. ${escapeHtml(profile.level)}</strong><span>${result.eligibleCount} itens compatíveis com nível e vocação${priorityElements.length ? ` · proteção da hunt: ${escapeHtml(priorityElements.map(elementLabel).join(", "))}` : ""}</span></div>
+      ${pair ? `<div class="bj-set-pair"><b>COMBINAÇÃO DE ARMA</b><strong>${escapeHtml(pair.weapon.name)}${pair.offhand ? ` + ${escapeHtml(pair.offhand.name)}` : pair.ammo ? ` + ${escapeHtml(pair.ammo.name)}` : pair.weapon.twoHanded ? " · 2 mãos" : ""}</strong><small>${pair.offhand ? "Arma de uma mão permite a peça secundária." : pair.ammo ? "Munição compatível com a arma." : pair.weapon.twoHanded ? "Arma de duas mãos ocupa ambos os slots." : ""}</small></div>` : ""}
+      ${!(profile.equipment || []).length ? '<div class="bj-stage-status">Equipamentos atuais ainda não lidos. O Jarvis tentará abrir o painel Skills automaticamente.</div>' : ""}
+      <div class="bj-set-list">${result.slots.map((entry) => {
+        const best = entry.best;
+        const worn = entry.equipped;
+        if (!best) return "";
+        const same = worn && core.normalizeLookup(worn.name) === core.normalizeLookup(best.name);
+        return `<article class="bj-set-row"><span class="bj-set-slot">${slotLabels[entry.slot]}</span><div><strong>${escapeHtml(best.name)}</strong><small>Nv. ${escapeHtml(best.level || "livre")} · ${escapeHtml(setItemFacts(best, profile.vocation))}</small><span class="${same ? "bj-set-equipped" : ""}">${same ? "✓ Já equipado" : `Equipado: ${escapeHtml(worn?.name || "não identificado")}`}</span>${entry.alternatives.length ? `<small>Outras opções: ${escapeHtml(entry.alternatives.map((item) => item.name).join(" · "))}</small>` : ""}</div></article>`;
+      }).join("")}</div>`;
   }
 
   function isHuntLocation(value) {
@@ -1209,7 +1291,12 @@
     }
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
+    if (action === "view-sets") await switchView("sets", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
+    if (action === "select-set-character") {
+      selectedSetCharacter = event.target.closest("button")?.dataset.name || null;
+      renderSets();
+    }
     if (action === "delete-hunt-run") {
       const id = event.target.closest("button")?.dataset.runId;
       const removed = huntRuns.find((run) => run.id === id);
@@ -1242,6 +1329,12 @@
   });
 
   host.addEventListener("change", async (event) => {
+    if (event.target.id === "bj-set-objective") {
+      settings.objective = event.target.value;
+      await ext.storage.local.set({ bjSettings: settings });
+      renderSets();
+      return;
+    }
     if (event.target.id !== "bj-hunt-select") return;
     settings.huntName = event.target.value || "Cobras";
     await ext.storage.local.set({ bjSettings: settings });

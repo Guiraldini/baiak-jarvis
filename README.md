@@ -2,6 +2,16 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.11
+
+- adiciona a aba **Sets**, com recomendações por personagem a partir de nível, vocação e prioridade escolhida;
+- compara os candidatos com os itens que o Jarvis consegue ler no painel Skills e mostra alternativas por slot;
+- considera armas de uma ou duas mãos: Druid nível 230 pode combinar Deepling Fork e Lion Spellbook;
+- usa um catálogo local extraído dos itens públicos do cliente do jogo, com 1.694 peças equipáveis e munições;
+- remove a legenda “stamina · party · builds” do cabeçalho.
+
+As recomendações usam atributos base; disponibilidade, imbuements e DPS real devem ser conferidos no jogo. O catálogo pode ser atualizado com `python scripts/build_equipment_catalog.py`.
+
 ## Versão 0.8.10
 
 - evita classificar uma hunt ativa como modo Chefes por causa de textos genéricos da interface;
@@ -86,7 +96,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.10.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.11.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -97,7 +107,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.10.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.11.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -117,4 +127,4 @@ O núcleo não depende de bibliotecas externas. Para executar os testes:
 node .\tests\core.test.js
 ```
 
-O rodapé do painel deve mostrar `Jarvis 0.8.10 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.11 AUTO · execução local`.
