@@ -102,6 +102,28 @@
 #baiak-jarvis .bj-tabs button { width: auto; height: 28px; padding: 0 13px; color: var(--bj-muted); font-size: 10px; font-weight: 700; }
 #baiak-jarvis .bj-tabs button[aria-selected="true"] { color: #161108; background: var(--bj-gold); border-color: var(--bj-gold); }
 #baiak-jarvis .bj-view-hidden { display: none; }
+#baiak-jarvis .bj-training-house[hidden] { display: none; }
+#baiak-jarvis .bj-training-view { height: min(580px, calc(100vh - 210px)); min-height: 360px; padding: 12px 3px 5px; overflow: auto; scrollbar-width: thin; }
+#baiak-jarvis .bj-training-heading strong, #baiak-jarvis .bj-training-house-head strong { display: block; color: var(--bj-gold); font-size: 11px; letter-spacing: .08em; }
+#baiak-jarvis .bj-training-heading small { display: block; margin-top: 4px; color: var(--bj-muted); font-size: 11px; }
+#baiak-jarvis .bj-training-options { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 14px 0; }
+#baiak-jarvis .bj-training-option { display: flex; align-items: flex-start; gap: 9px; min-height: 75px; padding: 13px; border: 1px solid #34404d; border-radius: 8px; background: var(--bj-panel); cursor: pointer; }
+#baiak-jarvis .bj-training-option:has(input:checked) { border-color: var(--bj-gold); background: rgba(231,184,78,.1); }
+#baiak-jarvis .bj-training-option input { margin: 3px 0 0; accent-color: var(--bj-gold); }
+#baiak-jarvis .bj-training-option b, #baiak-jarvis .bj-training-option small { display: block; }
+#baiak-jarvis .bj-training-option small { margin-top: 4px; color: var(--bj-muted); font-size: 10px; }
+#baiak-jarvis .bj-training-house { padding: 13px; border: 1px solid #34404d; border-radius: 8px; background: rgba(255,255,255,.035); }
+#baiak-jarvis .bj-training-house-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#baiak-jarvis .bj-training-house-head button { width: auto; padding: 0 9px; font-size: 10px; }
+#baiak-jarvis .bj-training-house-choice { display: block; margin-top: 12px; color: var(--bj-muted); font-size: 10px; }
+#baiak-jarvis .bj-training-house-choice select { display: block; width: 100%; margin-top: 5px; padding: 8px; color: var(--bj-text); background: #101821; border: 1px solid #354255; border-radius: 5px; }
+#baiak-jarvis .bj-training-status { margin-top: 10px; color: #91d9a8; font-size: 11px; }
+#baiak-jarvis .bj-training-repair { display: flex; align-items: center; gap: 8px; margin-top: 13px; font-size: 11px; cursor: pointer; }
+#baiak-jarvis .bj-training-repair input { accent-color: var(--bj-gold); }
+#baiak-jarvis .bj-training-repair-limit { display: block; margin-top: 8px; color: var(--bj-muted); font-size: 10px; }
+#baiak-jarvis .bj-training-repair-limit input { width: 110px; margin: 0 5px; padding: 5px; color: var(--bj-text); background: #101821; border: 1px solid #354255; border-radius: 5px; }
+#baiak-jarvis .bj-training-note { margin: 9px 0 0; color: var(--bj-muted); font-size: 10px; }
+#baiak-jarvis .bj-training-cycle { margin-top: 12px; padding: 12px; border: 1px solid rgba(231,184,78,.24); border-radius: 8px; background: rgba(231,184,78,.07); font-size: 11px; }
 #baiak-jarvis .bj-columns { display: grid; grid-template-columns: minmax(290px, .9fr) minmax(340px, 1.1fr); gap: 10px; height: min(580px, calc(100vh - 210px)); min-height: 360px; padding-top: 9px; }
 #baiak-jarvis .bj-column { min-width: 0; overflow: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #596575 transparent; }
 #baiak-jarvis .bj-column-details { padding-left: 9px; border-left: 1px solid rgba(255,255,255,.07); }

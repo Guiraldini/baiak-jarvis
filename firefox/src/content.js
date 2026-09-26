@@ -18,6 +18,10 @@
     automationEnabled: true,
     autoReload: true,
     huntName: "Cobras",
+    trainingMode: "online",
+    trainingHouseOwner: "",
+    autoRepairHouse: true,
+    maxRepairGold: 100000,
     codexVisible: true,
     codexHuntId: "",
     activeView: "dashboard"
@@ -37,6 +41,12 @@
   let lastSkillsScanAt = 0;
   let huntOptions = ["Cobras"];
   let huntScanBusy = false;
+  let houseScanBusy = false;
+  let lastHouseScanAt = 0;
+  let houseInvites = [];
+  let houseScanMessage = "Abra esta aba para buscar os convites do jogo.";
+  let currentHouseOwner = "";
+  let lastHouseRepairAt = 0;
   let refreshBusy = false;
   let huntRuns = [];
   let huntArchive = {};
@@ -76,6 +86,7 @@
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
         <button type="button" data-action="view-hunts" aria-selected="false">Hunts</button>
+        <button type="button" data-action="view-training" aria-selected="false">Treino</button>
         <button type="button" data-action="view-bosses" aria-selected="false">Chefes</button>
         <button type="button" data-action="view-sets" aria-selected="false">Sets</button>
         <button type="button" data-action="view-optimizer" aria-selected="false">Otimizador</button>
@@ -123,6 +134,24 @@
           <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
           <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
           <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
+        </div>
+      </section>
+      <section class="bj-view bj-view-hidden" id="bj-view-training">
+        <div class="bj-training-view">
+          <div class="bj-training-heading"><strong>ONDE TREINAR</strong><small>Escolha o destino usado quando a stamina chegar ao limite de treino.</small></div>
+          <div class="bj-training-options">
+            <label class="bj-training-option"><input type="radio" name="bj-training-mode" value="online"><span><b>Treino online</b><small>Treino padrão do jogo.</small></span></label>
+            <label class="bj-training-option"><input type="radio" name="bj-training-mode" value="house"><span><b>Casa de um amigo</b><small>Usa um convite disponível e entra pelo jogo.</small></span></label>
+          </div>
+          <div class="bj-training-house" id="bj-training-house">
+            <div class="bj-training-house-head"><strong>CASA CONVIDADA</strong><button type="button" data-action="refresh-houses">Atualizar convites</button></div>
+            <label class="bj-training-house-choice">Dono da casa<select id="bj-house-select" title="Escolher casa convidada"></select></label>
+            <div id="bj-house-status" class="bj-training-status" role="status"></div>
+            <label class="bj-training-repair"><input type="checkbox" id="bj-house-auto-repair"><span>Reparar dummy quebrado quando o botão de reparo aparecer</span></label>
+            <label class="bj-training-repair-limit">Limite por reparo: <input type="number" id="bj-house-repair-limit" min="0" step="1000" value="100000"> gold</label>
+            <p class="bj-training-note">A casa precisa ter dummy e vaga livre. O bônus depende do dummy. Em casas convidadas, o reparo só aparece no jogo ao passar o mouse sobre o dummy; sem esse botão visível, a extensão não consegue repará-lo sozinha.</p>
+          </div>
+          <div class="bj-training-cycle" id="bj-training-cycle"></div>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-bosses">
@@ -487,6 +516,7 @@
     });
     renderCycle(latestPlan);
     renderAutomationStatus();
+    renderTraining();
     renderHuntOptions();
     renderProfiles(snapshot);
     renderSets();
@@ -537,15 +567,40 @@
     select.value = selected;
   }
 
+  function renderTraining() {
+    const mode = settings.trainingMode === "house" ? "house" : "online";
+    for (const input of host.querySelectorAll('input[name="bj-training-mode"]')) input.checked = input.value === mode;
+    host.querySelector("#bj-training-house").hidden = mode !== "house";
+    const select = host.querySelector("#bj-house-select");
+    const selected = settings.trainingHouseOwner || "";
+    const names = [...new Set([selected, ...houseInvites.map((house) => house.owner)].filter(Boolean))];
+    select.innerHTML = `<option value="">Escolha um convite</option>${names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
+    select.value = selected;
+    const chosen = houseInvites.find((house) => core.normalizeLookup(house.owner) === core.normalizeLookup(selected));
+    const status = mode !== "house" ? "" : houseScanBusy ? "Lendo os convites do jogo…"
+      : !selected ? "Escolha a casa de um amigo para ativar o treino nela."
+      : chosen ? `${chosen.owner}: ${chosen.status}${chosen.capacity ? ` · ${chosen.occupancy}` : ""}.`
+      : houseScanMessage || "Esta casa não apareceu entre os convites atuais.";
+    host.querySelector("#bj-house-status").textContent = status;
+    host.querySelector("#bj-house-auto-repair").checked = Boolean(settings.autoRepairHouse);
+    const limit = host.querySelector("#bj-house-repair-limit");
+    if (document.activeElement !== limit) limit.value = String(Math.max(0, Number(settings.maxRepairGold) || 0));
+    const floor = latestPlan ? formatStamina(latestPlan.huntFloor) : "16%";
+    const ceiling = latestPlan ? formatStamina(latestPlan.huntCeiling) : "54%";
+    host.querySelector("#bj-training-cycle").textContent = `Treinar em ${floor} → voltar para ${settings.huntName || "Cobras"} em ${ceiling}. Destino: ${mode === "house" ? selected ? `casa de ${selected}` : "escolha uma casa" : "Treino online"}.`;
+  }
+
   async function switchView(view, persist = false) {
-    const selected = ["dashboard", "hunts", "bosses", "sets", "optimizer"].includes(view) ? view : "dashboard";
+    const selected = ["dashboard", "hunts", "training", "bosses", "sets", "optimizer"].includes(view) ? view : "dashboard";
     host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
     host.querySelector("#bj-view-hunts").classList.toggle("bj-view-hidden", selected !== "hunts");
+    host.querySelector("#bj-view-training").classList.toggle("bj-view-hidden", selected !== "training");
     host.querySelector("#bj-view-bosses").classList.toggle("bj-view-hidden", selected !== "bosses");
     host.querySelector("#bj-view-sets").classList.toggle("bj-view-hidden", selected !== "sets");
     host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
     host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
     host.querySelector('[data-action="view-hunts"]').setAttribute("aria-selected", String(selected === "hunts"));
+    host.querySelector('[data-action="view-training"]').setAttribute("aria-selected", String(selected === "training"));
     host.querySelector('[data-action="view-bosses"]').setAttribute("aria-selected", String(selected === "bosses"));
     host.querySelector('[data-action="view-sets"]').setAttribute("aria-selected", String(selected === "sets"));
     host.querySelector('[data-action="view-optimizer"]').setAttribute("aria-selected", String(selected === "optimizer"));
@@ -554,6 +609,10 @@
       if (!frame.getAttribute("src")) frame.src = frame.dataset.src;
     }
     settings.activeView = selected;
+    if (selected === "training") {
+      renderTraining();
+      if (!houseScanBusy && Date.now() - lastHouseScanAt > 60000) scanHouseInvites().catch((error) => { houseScanMessage = error.message; renderTraining(); });
+    }
     if (selected === "sets") renderSets();
     if (persist) await ext.storage.local.set({ bjSettings: settings });
   }
@@ -920,6 +979,119 @@
     }
   }
 
+  async function openHouseInvites() {
+    let modal = document.querySelector("#house-modal");
+    const wasOpen = isVisible(modal);
+    if (!wasOpen) {
+      const toggle = document.querySelector("#wave-title");
+      if (!toggle) throw new Error("O seletor de atividades do jogo não apareceu.");
+      if (!isVisible(document.querySelector("#teleport-menu"))) toggle.click();
+      const option = await waitForElement('#teleport-menu .tp-opt[data-tp="house"]', 3000);
+      if (!option || option.disabled) throw new Error("A opção Casa não está disponível nos teleportes.");
+      option.click();
+      modal = await waitForElement("#house-modal", 5000);
+      if (!modal) throw new Error("A janela Casa não abriu.");
+    }
+    const previousTab = [...modal.querySelectorAll(".house-tab.on")][0] || null;
+    const loaded = async () => {
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const intro = modal.querySelector("#house-casa-body .house-intro");
+        const disabled = core.normalizeLookup(modal.querySelector("#house-casa-body")?.textContent).includes("sistema de casas");
+        if (intro) return;
+        if (disabled) throw new Error("O sistema de casas está desativado no jogo.");
+        await delay(100);
+      }
+      throw new Error("O jogo não confirmou os convites da casa.");
+    };
+    await loaded();
+    const tab = [...modal.querySelectorAll(".house-tab")].find((button) => core.normalizeLookup(button.querySelector(".house-tab-label")?.textContent) === "convites");
+    if (!tab) throw new Error("A aba Convites não apareceu na janela Casa.");
+    tab.click();
+    await delay(100);
+    return { modal, wasOpen, previousTab };
+  }
+
+  function closeHouseInvites(context) {
+    if (!context) return;
+    if (context.wasOpen) {
+      if (context.previousTab?.isConnected) context.previousTab.click();
+    } else {
+      const close = document.querySelector("#house-modal-close");
+      if (isVisible(close)) close.click();
+    }
+  }
+
+  function readHouseInvites() {
+    const pane = document.querySelector("#house-friends-body");
+    if (!pane) throw new Error("A lista de convites da casa não apareceu.");
+    const houses = [];
+    let group = "";
+    for (const child of pane.children) {
+      if (child.classList.contains("house-group")) group = core.clean(child.textContent);
+      if (!child.classList.contains("house-row")) continue;
+      const owner = core.clean(child.querySelector(".house-row-owner")?.textContent);
+      const button = child.querySelector("button");
+      const action = core.normalizeLookup(button?.textContent);
+      const occupancy = core.clean(child.querySelector(".house-row-count")?.textContent);
+      const ready = action === "entrar" && !button.disabled;
+      const status = action === "aqui" ? "você já está aqui" : ready ? "pronta para treinar"
+        : action === "visitar" ? "sem dummy para treino" : group || "indisponível";
+      if (owner) houses.push({ owner, status, ready, occupancy, capacity: Boolean(occupancy), row: child });
+    }
+    return houses;
+  }
+
+  async function scanHouseInvites(force = false) {
+    if (houseScanBusy || automationBusy || (refreshBusy && !force) || bossRun.running || bossRun.inFight) return houseInvites;
+    houseScanBusy = true;
+    renderTraining();
+    let context = null;
+    try {
+      for (let attempt = 0; attempt < 100 && (huntScanBusy || skillsScanBusy); attempt += 1) await delay(100);
+      if (huntScanBusy || skillsScanBusy) throw new Error("Outra leitura do jogo ainda está em andamento. Tente atualizar os convites novamente.");
+      context = await openHouseInvites();
+      houseInvites = readHouseInvites().map(({ row, ...house }) => house);
+      if (core.normalizeLookup(document.querySelector("#wave-title")?.textContent) === "casa") {
+        currentHouseOwner = houseInvites.find((house) => house.status === "você já está aqui")?.owner || "";
+      }
+      lastHouseScanAt = Date.now();
+      houseScanMessage = houseInvites.length ? "Casa selecionada não encontrada nos convites atuais." : "Nenhum convite de casa apareceu no jogo.";
+      return houseInvites;
+    } finally {
+      closeHouseInvites(context);
+      houseScanBusy = false;
+      renderTraining();
+    }
+  }
+
+  async function selectHouseTraining(owner) {
+    if (!owner) throw new Error("Escolha a casa convidada na aba Treino antes de ativar esta opção.");
+    let context = null;
+    try {
+      context = await openHouseInvites();
+      const matches = readHouseInvites().filter((house) => core.normalizeLookup(house.owner) === core.normalizeLookup(owner));
+      if (matches.length !== 1) throw new Error(matches.length ? `Há mais de um convite para “${owner}”.` : `O convite de “${owner}” não apareceu no jogo.`);
+      const house = matches[0];
+      if (house.status === "você já está aqui") { currentHouseOwner = owner; return true; }
+      if (!house.ready) throw new Error(`Casa de “${owner}” indisponível: ${house.status}.`);
+      if (!settings.automationEnabled) throw new Error("Automação desligada antes de entrar na casa.");
+      house.row.querySelector("button").click();
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await delay(250);
+        const updated = readHouseInvites().find((item) => core.normalizeLookup(item.owner) === core.normalizeLookup(owner));
+        if (updated?.status === "você já está aqui" && locationMatches(document.querySelector("#wave-title")?.textContent, "Casa")) {
+          currentHouseOwner = owner;
+          return true;
+        }
+        const failure = core.clean(document.querySelector("#house-friends-body .house-msg")?.textContent);
+        if (failure) throw new Error(failure);
+      }
+      throw new Error(`O jogo não confirmou a entrada na casa de “${owner}”.`);
+    } finally {
+      closeHouseInvites(context);
+    }
+  }
+
   async function selectHunt(target) {
     await openHuntPicker();
     try {
@@ -959,6 +1131,7 @@
   }
 
   async function selectActivity(target) {
+    if (target === "Casa") return selectHouseTraining(settings.trainingHouseOwner);
     const toggle = document.querySelector("#wave-title");
     if (!toggle) throw new Error("O seletor de atividade não apareceu no jogo.");
     if (locationMatches(toggle.textContent, target)) return true;
@@ -988,16 +1161,27 @@
   }
 
   async function maybeAutomate(snapshot) {
-    if (!settings.automationEnabled || automationBusy || refreshBusy || bossRun.running || bossRun.inFight
+    if (!settings.automationEnabled || automationBusy || houseScanBusy || refreshBusy || bossRun.running || bossRun.inFight
       || isVisible(document.querySelector("#confirm-modal .bdiff"))
       || (bossRun.current && bossLocationMatches(bossRun.current))) return;
-    const decision = core.automationDecision(snapshot, {
+    let decision = core.automationDecision(snapshot, {
       enabled: true,
       huntName: settings.huntName || "Cobras",
+      trainingMode: settings.trainingMode,
       floorPercent: Number(settings.staminaFloorPercent) || 16,
       trainingDurationMinutes: Number(settings.trainingDurationMinutes) || 120,
       vipActive: true
     });
+    if (!decision && latestPlan && latestPlan.currentMinutes <= latestPlan.huntFloor) {
+      const location = core.normalizeLookup(snapshot.location);
+      if (settings.trainingMode === "house" && (location === "casa"
+        && core.normalizeLookup(currentHouseOwner) !== core.normalizeLookup(settings.trainingHouseOwner)
+        || location.includes("treino online"))) {
+        decision = { type: "train", target: "Casa", reason: "A casa escolhida para o treino mudou." };
+      } else if (settings.trainingMode !== "house" && location === "casa") {
+        decision = { type: "train", target: "Treino online", reason: "O local de treino escolhido mudou." };
+      }
+    }
     if (!decision) {
       if (latestPlan) {
         const next = latestPlan.phase === "train" ? `Caçar em ${formatStamina(latestPlan.huntCeiling)}.` : `Treinar em ${formatStamina(latestPlan.huntFloor)}.`;
@@ -1019,6 +1203,27 @@
     } finally {
       automationBusy = false;
     }
+  }
+
+  function maybeRepairHouseDummy(snapshot) {
+    if (!settings.automationEnabled || !settings.autoRepairHouse || settings.trainingMode !== "house"
+      || !settings.trainingHouseOwner || core.normalizeLookup(currentHouseOwner) !== core.normalizeLookup(settings.trainingHouseOwner)
+      || core.normalizeLookup(snapshot?.location) !== "casa" || automationBusy || bossRun.running
+      || Date.now() - lastHouseRepairAt < 30000) return;
+    const tip = document.querySelector("#house-dummy-tip");
+    if (!isVisible(tip) || !core.normalizeLookup(tip.textContent).includes("quebrado")) return;
+    const button = [...tip.querySelectorAll("button")].find((item) => core.normalizeLookup(item.textContent).startsWith("reparar"));
+    if (!button || button.disabled || !isVisible(button)) return;
+    const match = button.textContent.match(/(\d[\d.,]*)\s*gold/i);
+    const cost = match ? Number(match[1].replace(/\D/g, "")) : NaN;
+    const limit = Math.max(0, Number(settings.maxRepairGold) || 0);
+    if (!Number.isSafeInteger(cost) || cost <= 0 || cost > limit) {
+      setAutoState("error", `Reparo aguardando: custo ${Number.isSafeInteger(cost) ? `${formatNumber(cost)} gold` : "não identificado"}; limite ${formatNumber(limit)} gold.`);
+      return;
+    }
+    lastHouseRepairAt = Date.now();
+    button.click();
+    setAutoState("working", `Reparo solicitado ao jogo por ${formatNumber(cost)} gold. Aguardando confirmação.`);
   }
 
   function renderCycle(plan) {
@@ -1588,6 +1793,7 @@
       latestSnapshot = readSnapshot();
       await scanSkillsPanel(true);
       await scanHuntOptions(true);
+      if (settings.trainingMode === "house" || settings.activeView === "training") await scanHouseInvites(true);
       latestSnapshot = readSnapshot();
       mergeLiveProfiles(latestSnapshot);
       await maybeLoadStage(latestSnapshot.location, true);
@@ -1608,7 +1814,9 @@
   function tick(forceSkillsScan) {
     if (!settings.enabled) return;
     latestSnapshot = readSnapshot();
+    if (core.normalizeLookup(latestSnapshot.location) !== "casa") currentHouseOwner = "";
     render(latestSnapshot);
+    maybeRepairHouseDummy(latestSnapshot);
     if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
@@ -1683,6 +1891,12 @@
     }
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
+    if (action === "view-training") await switchView("training", true);
+    if (action === "refresh-houses") {
+      try { await scanHouseInvites(true); }
+      catch (error) { houseScanMessage = error.message; renderTraining(); }
+      return;
+    }
     if (action === "view-bosses") await switchView("bosses", true);
     if (action === "view-sets") await switchView("sets", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
@@ -1723,6 +1937,32 @@
   });
 
   host.addEventListener("change", async (event) => {
+    if (event.target.name === "bj-training-mode") {
+      settings.trainingMode = event.target.value === "house" ? "house" : "online";
+      renderTraining();
+      await ext.storage.local.set({ bjSettings: settings });
+      setAutoState("success", settings.trainingMode === "house"
+        ? `Ao chegar no limite, tentarei a casa de ${settings.trainingHouseOwner || "um amigo (escolha o convite)"}.`
+        : "Ao chegar no limite, irei para o Treino online.");
+      return;
+    }
+    if (event.target.id === "bj-house-select") {
+      settings.trainingHouseOwner = event.target.value;
+      renderTraining();
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
+    if (event.target.id === "bj-house-auto-repair") {
+      settings.autoRepairHouse = event.target.checked;
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
+    if (event.target.id === "bj-house-repair-limit") {
+      settings.maxRepairGold = Math.max(0, Math.floor(Number(event.target.value) || 0));
+      renderTraining();
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
     if (event.target.id === "bj-codex-select") {
       settings.codexHuntId = event.target.value;
       codexExpandedTier = -1;

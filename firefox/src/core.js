@@ -613,6 +613,7 @@
     const config = {
       enabled: true,
       huntName: "Cobras",
+      trainingMode: "online",
       floorPercent: 16,
       trainingDurationMinutes: 120,
       vipActive: true,
@@ -622,12 +623,13 @@
     const plan = staminaPlan(snapshot, config);
     if (!plan) return null;
     const location = normalizeLookup(snapshot.location || "");
-    const isTraining = location.includes("treino online") || /treinando/i.test(snapshot.activity || "");
+    const trainingTarget = config.trainingMode === "house" ? "Casa" : "Treino online";
+    const isTraining = location.includes("treino online") || location === "casa" || /treinando/i.test(snapshot.activity || "");
     const huntKey = normalizeLookup(config.huntName);
     const isTargetHunt = Boolean(huntKey) && (location.includes(huntKey) || huntKey.includes(location));
 
     if (plan.currentMinutes <= plan.huntFloor && !isTraining) {
-      return { type: "train", target: "Treino online", reason: `Stamina chegou a ${formatMinutes(plan.huntFloor)} (${plan.floorPercent}%).` };
+      return { type: "train", target: trainingTarget, reason: `Stamina chegou a ${formatMinutes(plan.huntFloor)} (${plan.floorPercent}%).` };
     }
     if (plan.currentMinutes >= plan.huntCeiling && !isTargetHunt) {
       return { type: "hunt", target: config.huntName, reason: `Stamina chegou a ${formatMinutes(plan.huntCeiling)} (${plan.targetPercent}%).` };

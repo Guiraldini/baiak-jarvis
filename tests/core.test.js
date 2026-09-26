@@ -247,6 +247,16 @@ assert.deepEqual(startTraining, {
   target: "Treino online",
   reason: "Stamina chegou a 6h43 (16%)."
 });
+assert.deepEqual(core.automationDecision({
+  ...snapshot,
+  location: "Cobras",
+  activity: "caçando",
+  stamina: { time: "6:43", percent: 16 }
+}, { enabled: true, huntName: "Cobras", trainingMode: "house", vipActive: true }), {
+  type: "train",
+  target: "Casa",
+  reason: "Stamina chegou a 6h43 (16%)."
+});
 
 const startHunt = core.automationDecision({
   ...snapshot,
@@ -255,6 +265,16 @@ const startHunt = core.automationDecision({
   stamina: { time: "22:43", percent: 54 }
 }, { enabled: true, huntName: "Cobras", vipActive: true });
 assert.deepEqual(startHunt, {
+  type: "hunt",
+  target: "Cobras",
+  reason: "Stamina chegou a 22h43 (54%)."
+});
+assert.deepEqual(core.automationDecision({
+  ...snapshot,
+  location: "Casa",
+  activity: "treinando",
+  stamina: { time: "22:43", percent: 54 }
+}, { enabled: true, huntName: "Cobras", trainingMode: "house", vipActive: true }), {
   type: "hunt",
   target: "Cobras",
   reason: "Stamina chegou a 22h43 (54%)."

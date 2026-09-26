@@ -2,6 +2,13 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.15
+
+- adiciona a aba **Treino** para escolher entre Treino online e uma casa convidada;
+- lê os convites, mostra se a casa tem vaga e dummy, e usa **Casa → Convites → Entrar** ao chegar no limite de stamina;
+- mantém a volta para a hunt escolhida quando a stamina alcança o limite de caça;
+- permite reparo automático de um dummy quebrado quando o botão de reparo estiver visível, respeitando o limite de gold configurado. Na casa de amigos, o botão só aparece ao passar o mouse sobre o dummy.
+
 ## Versão 0.8.14
 
 - corrige o Codex que mostrava 100% antes de todos os itens estarem completos;
@@ -117,7 +124,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.14.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.15.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -128,7 +135,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.14.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.15.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -151,4 +158,4 @@ node .\tests\codex.test.js
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.14 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.15 AUTO · execução local`.
