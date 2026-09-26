@@ -287,6 +287,22 @@ assert.equal(core.automationDecision({
   stamina: { time: "12:00", percent: 29 }
 }, { enabled: true, huntName: "Cobras", vipActive: true }), null);
 
+const partyXpRuns = [
+  { huntName: "Cobras", characterXp: { hero: { gain: 360000 }, tank: { gain: 120000 }, mage: { gain: 120000 } } },
+  { huntName: "Cobras", characterXp: { hero: { gain: 400000 }, tank: { gain: 130000 }, mage: { gain: 140000 } } },
+  { huntName: "Inferniarch", characterXp: { hero: { gain: 900000 }, tank: { gain: 300000 }, mage: { gain: 300000 } } }
+];
+assert.deepEqual(core.projectLevelFromWaves(partyXpRuns, "Cobras", { name: "Hero", xpRemaining: 500000 }), {
+  xpRemaining: 500000, averageXpPerWave: 380000, samples: 2, waves: 2
+});
+assert.deepEqual(core.projectLevelFromWaves(partyXpRuns, "Cobras", { name: "Tank", xpRemaining: 250000 }), {
+  xpRemaining: 250000, averageXpPerWave: 125000, samples: 2, waves: 2
+});
+assert.deepEqual(core.projectLevelFromWaves(partyXpRuns, "Cobras", { name: "Mage", xpRemaining: 100000 }), {
+  xpRemaining: 100000, averageXpPerWave: 130000, samples: 2, waves: 1
+});
+assert.equal(core.projectLevelFromWaves(partyXpRuns, "Cobras", { name: "New", xpRemaining: 500000 }).waves, null);
+
 const bossCards = [
   { name: "Ahau", favorite: true, ready: false },
   { name: "Prince Drazzak", favorite: true, ready: true },

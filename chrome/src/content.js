@@ -55,6 +55,7 @@
   let dailyXp = { day: core.brazilDayKey(Date.now()), xp: 0, waves: 0, partial: false };
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
+  let partyXpCaptureQueue = Promise.resolve();
   let selectedHuntKey = null;
   let selectedSetCharacter = null;
   let knownStaminaMaxMinutes = 42 * 60;
@@ -133,6 +134,7 @@
         <div class="bj-hunts-view">
           <div class="bj-hunts-heading"><div><strong>HISTÓRICO DE HUNTS</strong><small>Uma medição vai da wave 1 até a queda do boss.</small></div><span id="bj-hunt-run-count">0 waves</span></div>
           <section class="bj-live-run" id="bj-live-run"></section>
+          <section class="bj-level-projection"><div class="bj-section-title">PRÓXIMOS NÍVEIS · PARTY</div><div id="bj-level-projection"></div></section>
           <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
           <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
           <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
@@ -323,7 +325,9 @@
         return { label: core.clean(cells[0]?.textContent), value: core.clean(cells[1]?.textContent) };
       }).filter((entry) => entry.label && entry.value)
     })).filter((item) => item.name);
-    const basic = Object.fromEntries(valueRows("#skills-panel-body > .sk-stats:not(.sk-bonuses):not(.sk-itemstats)").map((item) => [item.label, item.value]));
+    const basic = Object.fromEntries(valueRows("#skills-panel-body > .sk-stats:not(.sk-bonuses):not(.sk-itemstats) > .sk-stat").map((item) => [item.label, item.value]));
+    const xpTitle = document.querySelector("#sk-xp-row")?.title || "";
+    const xpRemainingText = xpTitle.match(/(?:Faltam\s+)?([\d.,]+)\s+XP\b/i)?.[1];
     const bonusMap = Object.fromEntries(bonusEntries.map((item) => [core.normalizeLookup(item.label), item.value]));
     const defenseParts = ["defesa", "armadura"].filter((key) => bonusMap[key]).map((key) => `${key[0].toUpperCase() + key.slice(1)} ${bonusMap[key]}`);
     const sustainParts = ["life leech", "mana leech"].filter((key) => bonusMap[key]).map((key) => `${key === "life leech" ? "Life" : "Mana"} Leech ${bonusMap[key]}`);
@@ -331,6 +335,8 @@
       name,
       vocation,
       level: core.numberFromPtBr(basic["Nível"]),
+      xpTotal: core.numberFromPtBr(basic.XP),
+      xpRemaining: core.numberFromPtBr(xpRemainingText),
       hp: core.numberFromPtBr(basic["Pontos de Vida"]),
       mana: core.numberFromPtBr(basic.Mana),
       skillType: primarySkill,
@@ -1529,6 +1535,7 @@
       maxDurationSeconds: telemetry.durationSeconds,
       hadBossWave: telemetry.waveCount > 0 && telemetry.waveNumber === telemetry.waveCount,
       eligible,
+      partyXpStartPromise: eligible ? capturePartyXp(fromBoundary ? 1200 : 500).catch(() => null) : null,
       completed: false
     };
     huntMonitorMessage = eligible
@@ -1538,6 +1545,46 @@
 
   function metricDelta(endValue, startValue) {
     return Number.isFinite(endValue) && Number.isFinite(startValue) ? Math.max(0, endValue - startValue) : null;
+  }
+
+  function capturePartyXp(waitMs = 0) {
+    const capture = partyXpCaptureQueue.then(async () => {
+      if (waitMs) await delay(waitMs);
+      const previousScanAt = lastSkillsScanAt;
+      await scanSkillsPanel(true);
+      if (lastSkillsScanAt <= previousScanAt) return null;
+      const members = latestSnapshot?.characters?.length ? latestSnapshot.characters : readPartyCharacters();
+      const values = {};
+      for (const member of members) {
+        const profile = profiles[member.name];
+        if (Number.isFinite(profile?.xpTotal)) values[core.normalizeLookup(member.name)] = { name: member.name, xpTotal: profile.xpTotal };
+      }
+      return { capturedAt: Date.now(), location: core.clean(document.querySelector("#wave-title")?.textContent), values };
+    });
+    partyXpCaptureQueue = capture.catch(() => {});
+    return capture;
+  }
+
+  async function finishCharacterXp(record, startPromise, endPromise) {
+    try {
+      const [start, end] = await Promise.all([startPromise, endPromise]);
+      if (!start || !end || start.capturedAt > record.completedAt || end.capturedAt < record.completedAt
+        || end.capturedAt - record.completedAt > 15000
+        || core.normalizeLookup(start.location) !== core.normalizeLookup(record.huntName)
+        || core.normalizeLookup(end.location) !== core.normalizeLookup(record.huntName)) return;
+      const characterXp = {};
+      for (const [key, before] of Object.entries(start.values)) {
+        const after = end.values[key];
+        if (!after || after.xpTotal < before.xpTotal) continue;
+        characterXp[key] = { name: before.name, gain: after.xpTotal - before.xpTotal };
+      }
+      if (!Object.keys(characterXp).length) return;
+      const run = huntRuns.find((item) => item.id === record.id);
+      if (!run) return;
+      run.characterXp = characterXp;
+      await ext.storage.local.set({ bjHuntRuns: huntRuns });
+      renderHuntHistory();
+    } catch (_error) { /* Uma leitura incompleta não vira previsão de nível. */ }
   }
 
   function rollDailyXp(now = Date.now()) {
@@ -1571,6 +1618,10 @@
     dailyXp = core.addDailyHuntRun(dailyXp, record);
     huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
     ext.storage.local.set({ bjHuntRuns: huntRuns, bjHuntArchive: huntArchive, bjDailyXp: dailyXp }).catch(() => {});
+    if (huntTracker.partyXpStartPromise) {
+      const endPromise = capturePartyXp(1500).catch(() => null);
+      finishCharacterXp(record, huntTracker.partyXpStartPromise, endPromise);
+    }
   }
 
   function monitorHuntRun(snapshot) {
@@ -1674,6 +1725,19 @@
     const best = summaries[0] || null;
     host.querySelector("#bj-hunt-run-count").textContent = `${totalWaves} ${totalWaves === 1 ? "wave" : "waves"}`;
     host.querySelector("#bj-live-run").innerHTML = `<span class="bj-live-dot"></span><div><b>MEDIÇÃO EM TEMPO REAL</b><small>${escapeHtml(huntMonitorMessage)}</small></div>`;
+    const currentHunt = huntTracker?.huntName || settings.huntName || huntRuns.at(-1)?.huntName || "";
+    const members = latestSnapshot?.characters || [];
+    host.querySelector("#bj-level-projection").innerHTML = members.length ? `
+      <div class="bj-level-context">${escapeHtml(currentHunt || "Hunt atual")} · XP real recebida por personagem nas últimas 5 waves completas</div>
+      <div class="bj-level-list">${members.map((member) => {
+        const profile = profiles[member.name] || member;
+        const result = core.projectLevelFromWaves(huntRuns, currentHunt, { name: member.name, xpRemaining: profile.xpRemaining });
+        return `<article class="bj-level-card"><div><strong>${escapeHtml(member.name)}</strong><small>Nv. ${escapeHtml(member.level || "—")}</small></div>
+          <dl><div><dt>Falta para upar</dt><dd>${result.xpRemaining == null ? "Aguardando Skills" : `${formatNumber(result.xpRemaining)} XP`}</dd></div>
+          <div><dt>XP por wave</dt><dd>${result.samples ? `${formatNumber(Math.round(result.averageXpPerWave))} XP` : "Aguardando medição"}</dd></div></dl>
+          <p>${result.waves == null ? result.samples ? "Sem XP suficiente para estimar" : "Conclua uma wave para estimar" : `<b>${formatNumber(result.waves)} ${result.waves === 1 ? "wave" : "waves"}</b> para o próximo nível`}</p>
+        </article>`;
+      }).join("")}</div>` : '<div class="bj-empty-state">Aguardando os personagens aparecerem na Party.</div>';
     host.querySelector("#bj-hunt-summary").innerHTML = `
       <article><small>Melhor rendimento</small><strong>${best ? escapeHtml(best.huntName) : "—"}</strong><span>${best ? `${formatNumber(Math.round(best.xpPerHour))} XP/h` : "Aguardando waves"}</span></article>
       <article><small>Hunts comparadas</small><strong>${summaries.length}</strong><span>${totalWaves} waves completas</span></article>

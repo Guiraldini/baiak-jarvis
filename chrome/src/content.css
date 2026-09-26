@@ -278,6 +278,20 @@
 #baiak-jarvis .bj-live-dot { flex: 0 0 auto; width: 7px; height: 7px; margin-top: 3px; background: #43d17c; border-radius: 50%; box-shadow: 0 0 7px #43d17c; }
 #baiak-jarvis .bj-live-run b { display: block; color: #8ee3ae; font-size: 8px; letter-spacing: .08em; }
 #baiak-jarvis .bj-live-run small { display: block; margin-top: 2px; color: #c2ccd8; font-size: 10px; }
+#baiak-jarvis .bj-level-projection { margin-top: 12px; }
+#baiak-jarvis .bj-level-context { margin: 5px 0 7px; color: var(--bj-muted); font-size: 9px; }
+#baiak-jarvis .bj-level-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+#baiak-jarvis .bj-level-card { min-width: 0; padding: 9px; background: var(--bj-panel); border: 1px solid rgba(101,167,255,.22); border-radius: 7px; }
+#baiak-jarvis .bj-level-card > div:first-child { display: flex; justify-content: space-between; gap: 5px; }
+#baiak-jarvis .bj-level-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+#baiak-jarvis .bj-level-card small { color: var(--bj-muted); font-size: 9px; white-space: nowrap; }
+#baiak-jarvis .bj-level-card dl { display: grid; gap: 5px; margin: 8px 0; }
+#baiak-jarvis .bj-level-card dl > div { display: flex; justify-content: space-between; gap: 5px; }
+#baiak-jarvis .bj-level-card dt { color: var(--bj-muted); font-size: 8px; }
+#baiak-jarvis .bj-level-card dd { margin: 0; text-align: right; font-size: 9px; font-weight: 700; }
+#baiak-jarvis .bj-level-card p { margin: 0; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.07); color: #98c9fc; font-size: 9px; }
+#baiak-jarvis .bj-level-card p b { color: #8ee3ae; font-size: 12px; }
+@media (max-width: 680px) { #baiak-jarvis .bj-level-list { grid-template-columns: 1fr; } }
 #baiak-jarvis .bj-hunt-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 9px; }
 #baiak-jarvis .bj-hunt-summary article { padding: 9px; background: var(--bj-panel); border: 1px solid rgba(255,255,255,.055); border-radius: 7px; }
 #baiak-jarvis .bj-hunt-summary small, #baiak-jarvis .bj-hunt-summary span { display: block; color: var(--bj-muted); font-size: 8px; }

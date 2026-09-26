@@ -242,6 +242,25 @@
       })).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
   }
 
+  function projectLevelFromWaves(runs, huntName, character) {
+    const huntKey = normalizeLookup(huntName);
+    const nameKey = normalizeLookup(character?.name);
+    const remaining = Number(character?.xpRemaining);
+    const gains = [...(Array.isArray(runs) ? runs : [])].reverse()
+      .filter((run) => normalizeLookup(run?.huntName) === huntKey)
+      .map((run) => Number(run?.characterXp?.[nameKey]?.gain))
+      .filter((gain) => Number.isFinite(gain) && gain >= 0)
+      .slice(0, 5);
+    const averageXpPerWave = gains.length ? gains.reduce((sum, gain) => sum + gain, 0) / gains.length : null;
+    const xpRemaining = character?.xpRemaining != null && Number.isFinite(remaining) && remaining >= 0 ? remaining : null;
+    return {
+      xpRemaining,
+      averageXpPerWave,
+      samples: gains.length,
+      waves: xpRemaining != null && averageXpPerWave > 0 ? Math.ceil(xpRemaining / averageXpPerWave) : null
+    };
+  }
+
   function relativeDifference(value, baseline) {
     const current = Number(value);
     const reference = Number(baseline);
@@ -762,6 +781,7 @@
     skillMemberName,
     staminaPlan,
     summarizeHuntRuns,
+    projectLevelFromWaves,
     usage
   };
 });
