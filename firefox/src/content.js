@@ -47,6 +47,8 @@
   let houseScanMessage = "Abra esta aba para buscar os convites do jogo.";
   let currentHouseOwner = "";
   let lastHouseRepairAt = 0;
+  let lastOwnRepairScanAt = 0;
+  let ownRepairBusy = false;
   let refreshBusy = false;
   let huntRuns = [];
   let huntArchive = {};
@@ -141,15 +143,15 @@
           <div class="bj-training-heading"><strong>ONDE TREINAR</strong><small>Escolha o destino usado quando a stamina chegar ao limite de treino.</small></div>
           <div class="bj-training-options">
             <label class="bj-training-option"><input type="radio" name="bj-training-mode" value="online"><span><b>Treino online</b><small>Treino padrão do jogo.</small></span></label>
-            <label class="bj-training-option"><input type="radio" name="bj-training-mode" value="house"><span><b>Casa de um amigo</b><small>Usa um convite disponível e entra pelo jogo.</small></span></label>
+            <label class="bj-training-option"><input type="radio" name="bj-training-mode" value="house"><span><b>Casa</b><small>Escolha sua casa ou um convite disponível.</small></span></label>
           </div>
           <div class="bj-training-house" id="bj-training-house">
-            <div class="bj-training-house-head"><strong>CASA CONVIDADA</strong><button type="button" data-action="refresh-houses">Atualizar convites</button></div>
-            <label class="bj-training-house-choice">Dono da casa<select id="bj-house-select" title="Escolher casa convidada"></select></label>
+            <div class="bj-training-house-head"><strong>CASA PARA TREINO</strong><button type="button" data-action="refresh-houses">Atualizar casas</button></div>
+            <label class="bj-training-house-choice">Casa<select id="bj-house-select" title="Escolher casa para treino"></select></label>
             <div id="bj-house-status" class="bj-training-status" role="status"></div>
-            <label class="bj-training-repair"><input type="checkbox" id="bj-house-auto-repair"><span>Reparar dummy quebrado quando o botão de reparo aparecer</span></label>
+            <label class="bj-training-repair"><input type="checkbox" id="bj-house-auto-repair"><span>Reparar dummy quebrado automaticamente</span></label>
             <label class="bj-training-repair-limit">Limite por reparo: <input type="number" id="bj-house-repair-limit" min="0" step="1000" value="100000"> gold</label>
-            <p class="bj-training-note">A casa precisa ter dummy e vaga livre. O bônus depende do dummy. Em casas convidadas, o reparo só aparece no jogo ao passar o mouse sobre o dummy; sem esse botão visível, a extensão não consegue repará-lo sozinha.</p>
+            <p class="bj-training-note">Sua casa: o Jarvis verifica a aba Dummies e repara dentro do limite de gold. Casa convidada: o reparo só aparece ao passar o mouse sobre o dummy no jogo.</p>
           </div>
           <div class="bj-training-cycle" id="bj-training-cycle"></div>
         </div>
@@ -573,12 +575,13 @@
     host.querySelector("#bj-training-house").hidden = mode !== "house";
     const select = host.querySelector("#bj-house-select");
     const selected = settings.trainingHouseOwner || "";
-    const names = [...new Set([selected, ...houseInvites.map((house) => house.owner)].filter(Boolean))];
-    select.innerHTML = `<option value="">Escolha um convite</option>${names.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
+    const choices = [...new Map([...(selected ? [[selected, { id: selected, owner: selected === "__own__" ? "Sua casa" : selected }]] : []),
+      ...houseInvites.map((house) => [house.id || house.owner, house])]).values()];
+    select.innerHTML = `<option value="">Escolha uma casa</option>${choices.map((house) => `<option value="${escapeHtml(house.id || house.owner)}">${escapeHtml(house.owner)}</option>`).join("")}`;
     select.value = selected;
-    const chosen = houseInvites.find((house) => core.normalizeLookup(house.owner) === core.normalizeLookup(selected));
+    const chosen = houseInvites.find((house) => core.normalizeLookup(house.id || house.owner) === core.normalizeLookup(selected));
     const status = mode !== "house" ? "" : houseScanBusy ? "Lendo os convites do jogo…"
-      : !selected ? "Escolha a casa de um amigo para ativar o treino nela."
+      : !selected ? "Escolha sua casa ou a casa de um amigo para ativar o treino nela."
       : chosen ? `${chosen.owner}: ${chosen.status}${chosen.capacity ? ` · ${chosen.occupancy}` : ""}.`
       : houseScanMessage || "Esta casa não apareceu entre os convites atuais.";
     host.querySelector("#bj-house-status").textContent = status;
@@ -587,7 +590,7 @@
     if (document.activeElement !== limit) limit.value = String(Math.max(0, Number(settings.maxRepairGold) || 0));
     const floor = latestPlan ? formatStamina(latestPlan.huntFloor) : "16%";
     const ceiling = latestPlan ? formatStamina(latestPlan.huntCeiling) : "54%";
-    host.querySelector("#bj-training-cycle").textContent = `Treinar em ${floor} → voltar para ${settings.huntName || "Cobras"} em ${ceiling}. Destino: ${mode === "house" ? selected ? `casa de ${selected}` : "escolha uma casa" : "Treino online"}.`;
+    host.querySelector("#bj-training-cycle").textContent = `Treinar em ${floor} → voltar para ${settings.huntName || "Cobras"} em ${ceiling}. Destino: ${mode === "house" ? selected === "__own__" ? "sua casa" : selected ? `casa de ${selected}` : "escolha uma casa" : "Treino online"}.`;
   }
 
   async function switchView(view, persist = false) {
@@ -979,7 +982,7 @@
     }
   }
 
-  async function openHouseInvites() {
+  async function openHousePanel() {
     let modal = document.querySelector("#house-modal");
     const wasOpen = isVisible(modal);
     if (!wasOpen) {
@@ -1001,14 +1004,20 @@
         if (disabled) throw new Error("O sistema de casas está desativado no jogo.");
         await delay(100);
       }
-      throw new Error("O jogo não confirmou os convites da casa.");
+      throw new Error("O jogo não confirmou os dados da casa.");
     };
     await loaded();
+    return { modal, wasOpen, previousTab };
+  }
+
+  async function openHouseInvites() {
+    const context = await openHousePanel();
+    const { modal } = context;
     const tab = [...modal.querySelectorAll(".house-tab")].find((button) => core.normalizeLookup(button.querySelector(".house-tab-label")?.textContent) === "convites");
-    if (!tab) throw new Error("A aba Convites não apareceu na janela Casa.");
+    if (!tab) { closeHouseInvites(context); throw new Error("A aba Convites não apareceu na janela Casa."); }
     tab.click();
     await delay(100);
-    return { modal, wasOpen, previousTab };
+    return context;
   }
 
   function closeHouseInvites(context) {
@@ -1019,6 +1028,13 @@
       const close = document.querySelector("#house-modal-close");
       if (isVisible(close)) close.click();
     }
+  }
+
+  function clickHouseTab(context, label) {
+    const tab = [...context.modal.querySelectorAll(".house-tab")].find((button) =>
+      core.normalizeLookup(button.querySelector(".house-tab-label")?.textContent) === core.normalizeLookup(label));
+    if (!tab) throw new Error(`A aba ${label} não apareceu na janela Casa.`);
+    tab.click();
   }
 
   function readHouseInvites() {
@@ -1036,13 +1052,89 @@
       const ready = action === "entrar" && !button.disabled;
       const status = action === "aqui" ? "você já está aqui" : ready ? "pronta para treinar"
         : action === "visitar" ? "sem dummy para treino" : group || "indisponível";
-      if (owner) houses.push({ owner, status, ready, occupancy, capacity: Boolean(occupancy), row: child });
+      if (owner) houses.push({ id: owner, owner, status, ready, occupancy, capacity: Boolean(occupancy), row: child });
     }
     return houses;
   }
 
+  function readOwnHouse() {
+    const card = document.querySelector("#house-casa-body .house-card");
+    if (!card) return null;
+    const button = card.querySelector(".house-actions button");
+    const here = core.normalizeLookup(card.textContent).includes("voce ja esta treinando aqui");
+    const expired = Boolean(card.querySelector(".house-warn"));
+    const noDummy = core.normalizeLookup(card.textContent).includes("ninguem treina");
+    const occupancy = core.clean(card.textContent.match(/(\d+)\s+de\s+(\d+)\s+treinando/i)?.[0]);
+    const ready = Boolean(button && !button.disabled && !expired && !noDummy);
+    const status = here ? "você já está aqui" : expired ? "aluguel vencido" : noDummy ? "sem dummy funcionando"
+      : ready ? "pronta para treinar" : "indisponível";
+    return { id: "__own__", owner: "Sua casa", status, ready, occupancy, capacity: Boolean(occupancy), row: card };
+  }
+
+  async function repairOwnDummy(context) {
+    if (!settings.autoRepairHouse) return false;
+    clickHouseTab(context, "Dummies");
+    for (let attempt = 0; attempt < 30 && !document.querySelector("#house-dummies-body .hd-row"); attempt += 1) await delay(100);
+    const broken = [...document.querySelectorAll("#house-dummies-body .hd-row")].find((row) => row.querySelector(".hd-broken"));
+    if (!broken) return false;
+    const button = [...broken.querySelectorAll("button")].find((item) => core.normalizeLookup(item.textContent) === "reparar");
+    if (!button || button.disabled) throw new Error("O botão de reparo do dummy quebrado não está disponível.");
+    const match = button.title.match(/(\d[\d.,]*)\s*gold/i);
+    const cost = match ? Number(match[1].replace(/\D/g, "")) : NaN;
+    const limit = Math.max(0, Number(settings.maxRepairGold) || 0);
+    if (!Number.isSafeInteger(cost) || cost <= 0 || cost > limit) {
+      throw new Error(`Dummy quebrado: reparo ${Number.isSafeInteger(cost) ? `${formatNumber(cost)} gold` : "sem custo identificado"}; limite ${formatNumber(limit)} gold.`);
+    }
+    lastHouseRepairAt = Date.now();
+    button.click();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await delay(250);
+      const message = core.normalizeLookup(context.modal.querySelector("#house-dummies-body .house-msg")?.textContent);
+      if (message.includes("reparado")) return true;
+      const row = [...context.modal.querySelectorAll("#house-dummies-body .hd-row")].find((item) =>
+        core.normalizeLookup(item.querySelector(".hd-nome")?.textContent) === core.normalizeLookup(broken.querySelector(".hd-nome")?.textContent));
+      if (row && !row.querySelector(".hd-broken")) return true;
+    }
+    throw new Error("O jogo não confirmou o reparo do dummy.");
+  }
+
+  async function selectOwnHouse() {
+    let context = null;
+    try {
+      context = await openHousePanel();
+      clickHouseTab(context, "Casa");
+      let own = readOwnHouse();
+      if (!own) throw new Error("Esta conta não possui casa no jogo.");
+      if (own.status === "sem dummy funcionando" && settings.autoRepairHouse) {
+        await repairOwnDummy(context);
+        clickHouseTab(context, "Casa");
+        own = readOwnHouse();
+      }
+      if (own.status === "você já está aqui" && locationMatches(document.querySelector("#wave-title")?.textContent, "Casa")) {
+        currentHouseOwner = "__own__";
+        return true;
+      }
+      if (!own.ready) throw new Error(`Sua casa está indisponível: ${own.status}.`);
+      if (!settings.automationEnabled) throw new Error("Automação desligada antes de entrar na sua casa.");
+      own.row.querySelector(".house-actions button").click();
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await delay(250);
+        clickHouseTab(context, "Casa");
+        if (readOwnHouse()?.status === "você já está aqui" && locationMatches(document.querySelector("#wave-title")?.textContent, "Casa")) {
+          currentHouseOwner = "__own__";
+          return true;
+        }
+        const failure = core.clean(context.modal.querySelector("#house-casa-body .house-msg")?.textContent);
+        if (failure && !core.normalizeLookup(failure).includes("dummy reparado")) throw new Error(failure);
+      }
+      throw new Error("O jogo não confirmou a entrada na sua casa.");
+    } finally {
+      closeHouseInvites(context);
+    }
+  }
+
   async function scanHouseInvites(force = false) {
-    if (houseScanBusy || automationBusy || (refreshBusy && !force) || bossRun.running || bossRun.inFight) return houseInvites;
+    if (houseScanBusy || ownRepairBusy || automationBusy || (refreshBusy && !force) || bossRun.running || bossRun.inFight) return houseInvites;
     houseScanBusy = true;
     renderTraining();
     let context = null;
@@ -1050,12 +1142,12 @@
       for (let attempt = 0; attempt < 100 && (huntScanBusy || skillsScanBusy); attempt += 1) await delay(100);
       if (huntScanBusy || skillsScanBusy) throw new Error("Outra leitura do jogo ainda está em andamento. Tente atualizar os convites novamente.");
       context = await openHouseInvites();
-      houseInvites = readHouseInvites().map(({ row, ...house }) => house);
+      houseInvites = [readOwnHouse(), ...readHouseInvites()].filter(Boolean).map(({ row, ...house }) => house);
       if (core.normalizeLookup(document.querySelector("#wave-title")?.textContent) === "casa") {
-        currentHouseOwner = houseInvites.find((house) => house.status === "você já está aqui")?.owner || "";
+        currentHouseOwner = houseInvites.find((house) => house.status === "você já está aqui")?.id || "";
       }
       lastHouseScanAt = Date.now();
-      houseScanMessage = houseInvites.length ? "Casa selecionada não encontrada nos convites atuais." : "Nenhum convite de casa apareceu no jogo.";
+      houseScanMessage = houseInvites.length ? "Casa selecionada não encontrada nesta conta." : "Esta conta não tem casa própria nem convites disponíveis.";
       return houseInvites;
     } finally {
       closeHouseInvites(context);
@@ -1065,7 +1157,8 @@
   }
 
   async function selectHouseTraining(owner) {
-    if (!owner) throw new Error("Escolha a casa convidada na aba Treino antes de ativar esta opção.");
+    if (!owner) throw new Error("Escolha uma casa na aba Treino antes de ativar esta opção.");
+    if (owner === "__own__") return selectOwnHouse();
     let context = null;
     try {
       context = await openHouseInvites();
@@ -1161,7 +1254,7 @@
   }
 
   async function maybeAutomate(snapshot) {
-    if (!settings.automationEnabled || automationBusy || houseScanBusy || refreshBusy || bossRun.running || bossRun.inFight
+    if (!settings.automationEnabled || automationBusy || ownRepairBusy || houseScanBusy || refreshBusy || bossRun.running || bossRun.inFight
       || isVisible(document.querySelector("#confirm-modal .bdiff"))
       || (bossRun.current && bossLocationMatches(bossRun.current))) return;
     let decision = core.automationDecision(snapshot, {
@@ -1210,6 +1303,25 @@
       || !settings.trainingHouseOwner || core.normalizeLookup(currentHouseOwner) !== core.normalizeLookup(settings.trainingHouseOwner)
       || core.normalizeLookup(snapshot?.location) !== "casa" || automationBusy || bossRun.running
       || Date.now() - lastHouseRepairAt < 30000) return;
+    if (settings.trainingHouseOwner === "__own__") {
+      if (ownRepairBusy || houseScanBusy || huntScanBusy || skillsScanBusy || refreshBusy
+        || Date.now() - lastOwnRepairScanAt < 60000) return;
+      ownRepairBusy = true;
+      lastOwnRepairScanAt = Date.now();
+      (async () => {
+        let context = null;
+        try {
+          context = await openHousePanel();
+          if (await repairOwnDummy(context)) setAutoState("success", "Dummy da sua casa reparado pelo jogo.");
+        } catch (error) {
+          setAutoState("error", error.message);
+        } finally {
+          closeHouseInvites(context);
+          ownRepairBusy = false;
+        }
+      })();
+      return;
+    }
     const tip = document.querySelector("#house-dummy-tip");
     if (!isVisible(tip) || !core.normalizeLookup(tip.textContent).includes("quebrado")) return;
     const button = [...tip.querySelectorAll("button")].find((item) => core.normalizeLookup(item.textContent).startsWith("reparar"));
@@ -1816,6 +1928,10 @@
     latestSnapshot = readSnapshot();
     if (core.normalizeLookup(latestSnapshot.location) !== "casa") currentHouseOwner = "";
     render(latestSnapshot);
+    if (settings.automationEnabled && settings.trainingMode === "house" && core.normalizeLookup(latestSnapshot.location) === "casa"
+      && !currentHouseOwner && !houseScanBusy && !automationBusy && Date.now() - lastHouseScanAt > 60000) {
+      scanHouseInvites().catch((error) => { houseScanMessage = error.message; renderTraining(); });
+    }
     maybeRepairHouseDummy(latestSnapshot);
     if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
@@ -1942,7 +2058,8 @@
       renderTraining();
       await ext.storage.local.set({ bjSettings: settings });
       setAutoState("success", settings.trainingMode === "house"
-        ? `Ao chegar no limite, tentarei a casa de ${settings.trainingHouseOwner || "um amigo (escolha o convite)"}.`
+        ? settings.trainingHouseOwner === "__own__" ? "Ao chegar no limite, entrarei na sua casa."
+          : `Ao chegar no limite, tentarei a casa de ${settings.trainingHouseOwner || "um amigo (escolha a casa)"}.`
         : "Ao chegar no limite, irei para o Treino online.");
       return;
     }
