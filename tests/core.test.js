@@ -109,12 +109,28 @@ assert.equal(huntSummary[0].xpPerHour, 13500000);
 assert.equal(huntSummary.find((item) => item.huntName === "Cobras").runs, 2);
 assert.equal(Math.round(huntSummary.find((item) => item.huntName === "Cobras").averageDurationSeconds), 630);
 assert.equal(huntSummary.find((item) => item.huntName === "Cobras").averageLoot, 350000);
+const firstHunt = { huntName: "Livraria EARTH", durationSeconds: 180, xpGain: 900000, loot: 120000, balance: 110000 };
+const newerHunts = Array.from({ length: 200 }, (_, index) => ({
+  huntName: ["Livraria FIRE", "Vexclaw", "Mega Dragon", "Undead Dragon"][index % 4],
+  durationSeconds: 180, xpGain: 1000000, loot: 130000, balance: 120000
+}));
+const archive = core.archiveHuntRuns({}, [firstHunt]);
+const fiveHunts = core.summarizeHuntRuns(newerHunts, archive);
+assert.equal(fiveHunts.length, 5);
+assert.equal(fiveHunts.find((item) => item.huntName === "Livraria EARTH").runs, 1);
+assert.equal(fiveHunts.find((item) => item.huntName === "Livraria FIRE").runs, 50);
+assert.equal(core.archiveHuntRuns(archive, [{ ...firstHunt, xpGain: 1200000 }])["livraria earth"].runs, 2);
 assert.equal(Math.round(core.relativeDifference(18076309, 17056836) * 100) / 100, 5.98);
 assert.equal(Math.round(core.relativeDifference(17056836, 18076309) * 100) / 100, -5.64);
 assert.equal(core.relativeDifference(100, 0), null);
 assert.equal(core.bossModeDetected({ badgeText: "Boss" }), true);
 assert.equal(core.bossModeDetected({ partyManageTitle: "Não dá pra mexer na party durante um boss." }), true);
 assert.equal(core.bossModeDetected({ badgeText: "", partyManageTitle: "Gerenciar party" }), false);
+assert.equal(core.bossModeDetected({
+  location: "Mega Dragon", waveCount: 10, timerVisible: true,
+  badgeText: "Boss", partyManageTitle: "Não dá pra mexer na party durante um boss."
+}), false);
+assert.equal(core.bossModeDetected({ location: "Chefes", waveCount: 10, timerVisible: true }), true);
 
 const vipTrainingPlan = core.staminaPlan(snapshot, { vipActive: true });
 assert.equal(vipTrainingPlan.phase, "train");

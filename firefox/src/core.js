@@ -203,8 +203,8 @@
     return { waveRestarted, timerReset };
   }
 
-  function summarizeHuntRuns(runs) {
-    const groups = new Map();
+  function archiveHuntRuns(archive, runs) {
+    const groups = new Map(Object.entries(archive || {}).map(([key, value]) => [key, { ...value }]));
     for (const run of Array.isArray(runs) ? runs : []) {
       const durationSeconds = Number(run && run.durationSeconds);
       const xpGain = Number(run && run.xpGain);
@@ -228,7 +228,11 @@
       current.bestXpPerHour = Math.max(current.bestXpPerHour, xpPerHour);
       groups.set(key, current);
     }
-    return [...groups.values()].map((group) => ({
+    return Object.fromEntries(groups);
+  }
+
+  function summarizeHuntRuns(runs, archive = {}) {
+    return Object.values(archiveHuntRuns(archive, runs)).map((group) => ({
         ...group,
         averageDurationSeconds: group.totalDurationSeconds / group.runs,
         averageXp: group.totalXp / group.runs,
@@ -246,6 +250,9 @@
   }
 
   function bossModeDetected(input) {
+    const location = normalizeLookup(input && input.location);
+    if (/^(chefes?|bosses?)$/.test(location)) return true;
+    if (location && input?.timerVisible) return false;
     const signal = normalizeLookup([
       input && input.badgeText,
       input && input.partyManageTitle,
@@ -611,6 +618,7 @@
     buildRecommendations,
     bossModeDetected,
     addDailyHuntRun,
+    archiveHuntRuns,
     brazilDayKey,
     catalogStageFromCells,
     clean,
