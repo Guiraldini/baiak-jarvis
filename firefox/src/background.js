@@ -9,7 +9,13 @@ const GAME_URL = /^https:\/\/(?:www\.)?baiakidle\.com\/jogar\/?/i;
 const RELOAD_COOLDOWN = 5 * 60 * 1000;
 const GITHUB_RELEASE_API = "https://api.github.com/repos/Guiraldini/baiak-jarvis/releases/latest";
 const GITHUB_RELEASE_PAGE = "https://github.com/Guiraldini/baiak-jarvis/releases/latest";
-const PACKAGE_BROWSER = globalThis.browser ? "firefox" : "chrome";
+const PACKAGE_BROWSER = (() => {
+  const agent = globalThis.navigator?.userAgent || "";
+  if (/\bFirefox\/\d/i.test(agent)) return "firefox";
+  if (/\b(?:Chrome|Chromium|Edg|OPR)\/\d/i.test(agent)) return "chrome";
+  if (typeof ext.runtime.getBrowserInfo === "function") return "firefox";
+  return ext.runtime.getManifest().browser_specific_settings?.gecko?.id ? "firefox" : "chrome";
+})();
 
 ext.alarms.get("bj-watchdog").then((alarm) => {
   if (!alarm) ext.alarms.create("bj-watchdog", { periodInMinutes: 1 });
