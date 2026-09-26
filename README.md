@@ -2,6 +2,14 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.23
+
+- grava o histórico de hunts em sequência para evitar perda de waves e XP de personagens quando várias leituras terminam próximas;
+- mantém a XP do dia, o arquivo de waves antigas e a exclusão de medições no mesmo estado gravado;
+- inicia a recuperação automática mesmo quando o jogo falha antes de enviar o primeiro sinal à extensão;
+- o botão **↻** continua as outras leituras se uma parte do jogo falhar e informa qual ficou incompleta;
+- adiciona testes para gravações concorrentes e recuperação da página.
+
 ## Versão 0.8.22
 
 - após uma vitória, aguarda a lista de favoritos e os botões **Enfrentar** do jogo terminarem de atualizar antes de escolher o próximo chefe;

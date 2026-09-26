@@ -223,6 +223,15 @@
     return { ...current, xp: current.xp + run.xpGain, waves: current.waves + 1 };
   }
 
+  function createLatestWriteQueue(readState, writeState) {
+    let queue = Promise.resolve();
+    return () => {
+      const write = queue.then(() => writeState(readState()));
+      queue = write.catch(() => {});
+      return write;
+    };
+  }
+
   function huntRunTransition(previous, current) {
     const waveRestarted = previous.hadBossWave && current.waveNumber != null && previous.lastWaveNumber != null
       && current.waveNumber < previous.lastWaveNumber;
@@ -810,6 +819,7 @@
     bossRunDecision,
     summarizeBossFight,
     addDailyHuntRun,
+    createLatestWriteQueue,
     archiveHuntRuns,
     brazilDayKey,
     catalogStageFromCells,

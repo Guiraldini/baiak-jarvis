@@ -23,7 +23,7 @@ ext.alarms.get("bj-watchdog").then((alarm) => {
 
 async function reloadGameTab(tabId, reason) {
   const now = Date.now();
-  if (now - (lastReload.get(tabId) || 0) < RELOAD_COOLDOWN) return false;
+  if (lastReload.has(tabId) && now - lastReload.get(tabId) < RELOAD_COOLDOWN) return false;
   const { bjSettings = {} } = await ext.storage.local.get({ bjSettings: {} });
   if (bjSettings.autoReload === false) return false;
   lastReload.set(tabId, now);
@@ -48,7 +48,8 @@ ext.alarms.onAlarm.addListener(async (alarm) => {
   const now = Date.now();
   for (const tab of tabs) {
     const seen = heartbeats.get(tab.id);
-    if (seen && now - seen > 3 * 60 * 1000) await reloadGameTab(tab.id, "A página parou de responder.");
+    if (!seen) heartbeats.set(tab.id, now);
+    else if (now - seen > 3 * 60 * 1000) await reloadGameTab(tab.id, "A página parou de responder.");
   }
 });
 
@@ -71,7 +72,7 @@ ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.errorDetected || message.stalled) {
       const began = errorSince.get(tabId) || now;
       errorSince.set(tabId, began);
-      if (now - began >= 30000) reloadGameTab(tabId, message.errorDetected ? "O jogo informou desconexão." : "O jogo ficou travado.");
+      if (now - began >= 30000) reloadGameTab(tabId, message.errorDetected ? "O jogo informou desconexão." : "O jogo ficou travado.").catch(() => {});
     } else {
       errorSince.delete(tabId);
     }

@@ -53,6 +53,13 @@
   let huntRuns = [];
   let huntArchive = {};
   let dailyXp = { day: core.brazilDayKey(Date.now()), xp: 0, waves: 0, partial: false };
+  const huntWriterId = `${Date.now()}-${Math.random()}`;
+  const persistHuntState = core.createLatestWriteQueue(() => ({
+    bjHuntRuns: huntRuns,
+    bjHuntArchive: huntArchive,
+    bjDailyXp: dailyXp,
+    bjHuntWriter: huntWriterId
+  }), (state) => ext.storage.local.set(state));
   let huntTracker = null;
   let huntMonitorMessage = "Aguardando uma hunt começar.";
   let partyXpCaptureQueue = Promise.resolve();
@@ -1775,7 +1782,7 @@
       const run = huntRuns.find((item) => item.id === record.id);
       if (!run) return;
       run.characterXp = characterXp;
-      await ext.storage.local.set({ bjHuntRuns: huntRuns });
+      await persistHuntState();
       renderHuntHistory();
     } catch (_error) { /* Uma leitura incompleta não vira previsão de nível. */ }
   }
@@ -1810,7 +1817,7 @@
     huntRuns = allRuns.slice(-200);
     dailyXp = core.addDailyHuntRun(dailyXp, record);
     huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
-    ext.storage.local.set({ bjHuntRuns: huntRuns, bjHuntArchive: huntArchive, bjDailyXp: dailyXp }).catch(() => {});
+    persistHuntState().catch(() => {});
     if (huntTracker.partyXpStartPromise) {
       const endPromise = capturePartyXp(1500).catch(() => null);
       finishCharacterXp(record, huntTracker.partyXpStartPromise, endPromise);
@@ -1912,7 +1919,7 @@
   }
 
   function renderHuntHistory() {
-    if (rollDailyXp()) ext.storage.local.set({ bjDailyXp: dailyXp }).catch(() => {});
+    if (rollDailyXp()) persistHuntState().catch(() => {});
     const summaries = core.summarizeHuntRuns(huntRuns, huntArchive);
     const totalWaves = huntRuns.length + Object.values(huntArchive).reduce((sum, group) => sum + group.runs, 0);
     const best = summaries[0] || null;
@@ -2173,21 +2180,25 @@
     button.textContent = "…";
     button.title = "Atualizando dados e verificando o GitHub";
     setAutoState("working", "Atualizando dados e verificando se há nova versão…");
-    let gameError = null;
-    try {
-      latestSnapshot = readSnapshot();
-      await scanSkillsPanel(true);
-      await scanHuntOptions(true);
-      if (settings.trainingMode === "house" || settings.activeView === "training") await scanHouseInvites(true);
+    const gameErrors = [];
+    const refreshStep = async (label, action) => {
+      try { await action(); }
+      catch (error) { gameErrors.push(`${label}: ${error.message || error}`); }
+    };
+    await refreshStep("Skills", () => scanSkillsPanel(true));
+    await refreshStep("Hunts", () => scanHuntOptions(true));
+    if (settings.trainingMode === "house" || settings.activeView === "training") {
+      await refreshStep("Casas", () => scanHouseInvites(true));
+    }
+    await refreshStep("Painel", async () => {
       latestSnapshot = readSnapshot();
       mergeLiveProfiles(latestSnapshot);
-      await maybeLoadStage(latestSnapshot.location, true);
       render(latestSnapshot);
       lastHistoryAt = 0;
       await saveHistory(latestSnapshot);
-    } catch (error) {
-      gameError = error.message;
-    }
+    });
+    if (latestSnapshot) await refreshStep("Análise", () => maybeLoadStage(latestSnapshot.location, true));
+    const gameError = gameErrors.join(" · ") || null;
     try {
       const update = await checkGitHubUpdate();
       if (update) setAutoState(gameError ? "error" : "success", `Versão ${update.version} disponível: ${update.action === "downloaded" ? "ZIP baixado na pasta Downloads" : "página do GitHub aberta"}.${gameError ? ` Dados do jogo incompletos: ${gameError}` : ""}`);
@@ -2310,7 +2321,7 @@
         && core.brazilDayKey(removed.completedAt) === dailyXp.day) {
         dailyXp = { ...dailyXp, xp: Math.max(0, dailyXp.xp - removed.xpGain), waves: Math.max(0, dailyXp.waves - 1) };
       }
-      await ext.storage.local.set({ bjHuntRuns: huntRuns, bjDailyXp: dailyXp });
+      await persistHuntState();
       renderHuntHistory();
     }
     if (action === "reload-stage") {
@@ -2412,7 +2423,7 @@
     const validDaily = bjDailyXp?.day === today && Number.isFinite(bjDailyXp.xp) && bjDailyXp.xp >= 0
       && Number.isFinite(bjDailyXp.waves) && bjDailyXp.waves >= 0;
     dailyXp = validDaily ? bjDailyXp : core.dailyHuntXp(huntRuns, today);
-    if (!validDaily) ext.storage.local.set({ bjDailyXp: dailyXp }).catch(() => {});
+    if (!validDaily) persistHuntState().catch(() => {});
     const resumeBossRun = restoreBossRun();
     schedule();
     if (resumeBossRun) runFavoriteBosses().finally(() => { bossRun.loopBusy = false; renderBossRun(); });
@@ -2428,12 +2439,17 @@
       huntOptions = changes.bjHuntOptions.newValue || ["Cobras"];
       renderHuntOptions();
     }
-    if (area === "local" && changes.bjHuntRuns) {
+    if (area === "local" && changes.bjHuntRuns && changes.bjHuntWriter?.newValue !== huntWriterId) {
       huntRuns = Array.isArray(changes.bjHuntRuns.newValue) ? changes.bjHuntRuns.newValue : [];
       renderHuntHistory();
     }
-    if (area === "local" && changes.bjHuntArchive) {
+    if (area === "local" && changes.bjHuntArchive && changes.bjHuntWriter?.newValue !== huntWriterId) {
       huntArchive = changes.bjHuntArchive.newValue || {};
+      renderHuntHistory();
+    }
+    if (area === "local" && changes.bjDailyXp && changes.bjHuntWriter?.newValue !== huntWriterId) {
+      const incoming = changes.bjDailyXp.newValue;
+      if (incoming?.day === core.brazilDayKey(Date.now())) dailyXp = incoming;
       renderHuntHistory();
     }
   });
