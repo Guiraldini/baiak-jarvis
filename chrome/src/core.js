@@ -308,6 +308,14 @@
     return /\b(boss|bosses|chefe|chefes)\b/.test(signal);
   }
 
+  function bossFightSignal(input) {
+    const name = normalizeLookup(input?.name);
+    const location = normalizeLookup(input?.location);
+    if (name && location === name) return true;
+    const signal = normalizeLookup([input?.badgeText, input?.partyManageTitle].filter(Boolean).join(" "));
+    return /\b(boss|chefe)\b/.test(signal);
+  }
+
   function durationToMinutes(value) {
     const match = String(value || "").match(/^(\d{1,3}):(\d{2})$/);
     if (!match) return null;
@@ -700,6 +708,26 @@
     return { type: "fight", name: chosen.name };
   }
 
+  function summarizeBossFight(beforeXp, afterXp, damagePeak, durationSeconds) {
+    const beforeEntries = Object.entries(beforeXp || {});
+    const xpByCharacter = beforeEntries.flatMap(([key, before]) => {
+      const after = afterXp?.[key];
+      if (!Number.isFinite(before?.xpTotal) || !Number.isFinite(after?.xpTotal) || after.xpTotal < before.xpTotal) return [];
+      return [{ name: before.name, gain: after.xpTotal - before.xpTotal }];
+    });
+    const damageByCharacter = Object.values(damagePeak || {})
+      .filter((entry) => entry?.name && Number.isFinite(entry.total) && entry.total >= 0)
+      .sort((a, b) => b.total - a.total);
+    return {
+      durationSeconds: Number.isFinite(durationSeconds) && durationSeconds >= 0 ? durationSeconds : null,
+      xpTotal: xpByCharacter.length && xpByCharacter.length === beforeEntries.length
+        ? xpByCharacter.reduce((sum, entry) => sum + entry.gain, 0) : null,
+      xpByCharacter,
+      damageByCharacter,
+      damageLeader: damageByCharacter[0] || null
+    };
+  }
+
   function recommendation(id, severity, title, detail) {
     return { id, severity, title, detail };
   }
@@ -778,7 +806,9 @@
   return {
     buildRecommendations,
     bossModeDetected,
+    bossFightSignal,
     bossRunDecision,
+    summarizeBossFight,
     addDailyHuntRun,
     archiveHuntRuns,
     brazilDayKey,

@@ -2,6 +2,13 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.19
+
+- reconhece a entrada em um chefe pelos sinais de combate do jogo, mesmo quando o título ainda mostra a última hunt; após uma vitória confirmada, segue para o próximo favorito disponível;
+- mantém a run em andamento ao recarregar a página e conserva os resultados da run na aba;
+- mostra XP e tempo medidos em cada chefe, XP total da run e qual personagem da party causou mais dano somado em cada luta;
+- só soma a XP quando consegue ler todos os personagens ativos antes e depois da luta. Se não conseguir medir, exibe `—` em vez de estimar.
+
 ## Versão 0.8.18
 
 - mostra apenas os personagens ativos listados no painel Party, evitando nomes extras capturados de outros textos do jogo;
@@ -47,7 +54,7 @@ Extensão local para acompanhar a party do Baiak Idle, analisar a hunt seleciona
 - usa somente chefes prontos, verifica as cargas e confirma cada resultado antes de iniciar o próximo;
 - interrompe a sequência após derrota, desconexão, resultado incerto ou escolha de dificuldade que precise ser feita no jogo;
 - suspende a troca automática entre treino e hunt durante a run; o botão **Parar run** não cancela uma luta já iniciada;
-- não usa a assinatura Auto Boss do jogo. A run começa apenas pelo botão do Jarvis e não é retomada automaticamente depois de recarregar a página.
+- não usa a assinatura Auto Boss do jogo. A run começa apenas pelo botão do Jarvis.
 
 ## Versão 0.8.11
 
@@ -143,7 +150,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.18.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.19.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -154,7 +161,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.18.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.19.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -178,4 +185,4 @@ node .\tests\background.test.js
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.18 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.19 AUTO · execução local`.

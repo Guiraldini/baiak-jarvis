@@ -174,6 +174,9 @@ assert.equal(core.bossModeDetected({
   badgeText: "Boss", partyManageTitle: "Não dá pra mexer na party durante um boss."
 }), false);
 assert.equal(core.bossModeDetected({ location: "Chefes", waveCount: 10, timerVisible: true }), true);
+assert.equal(core.bossFightSignal({ name: "Brain Head", location: "Crawler", badgeText: "Boss" }), true);
+assert.equal(core.bossFightSignal({ name: "Brain Head", location: "Crawler", partyManageTitle: "Não dá pra mexer na party durante um boss." }), true);
+assert.equal(core.bossFightSignal({ name: "Brain Head", location: "Crawler" }), false);
 
 const vipTrainingPlan = core.staminaPlan(snapshot, { vipActive: true });
 assert.equal(vipTrainingPlan.phase, "train");
@@ -338,5 +341,19 @@ assert.deepEqual(core.bossRunDecision([
   { name: "Ahau", favorite: true, ready: true },
   { name: "Áhau", favorite: true, ready: true }
 ], [], 3), { type: "stop", reason: "ambiguous-boss" });
+
+const bossMetrics = core.summarizeBossFight(
+  { hero: { name: "Hero", xpTotal: 1000 }, tank: { name: "Tank", xpTotal: 2000 } },
+  { hero: { name: "Hero", xpTotal: 1300 }, tank: { name: "Tank", xpTotal: 2200 } },
+  { hero: { name: "Hero", total: 900 }, tank: { name: "Tank", total: 1200 } }, 47
+);
+assert.equal(bossMetrics.xpTotal, 500);
+assert.equal(bossMetrics.durationSeconds, 47);
+assert.equal(bossMetrics.damageLeader.name, "Tank");
+assert.equal(core.summarizeBossFight({}, {}, {}, 12).xpTotal, null);
+assert.equal(core.summarizeBossFight(
+  { hero: { name: "Hero", xpTotal: 1000 }, tank: { name: "Tank", xpTotal: 2000 } },
+  { hero: { name: "Hero", xpTotal: 1300 } }, {}, 12
+).xpTotal, null);
 
 console.log("core.test.js: todos os testes passaram");

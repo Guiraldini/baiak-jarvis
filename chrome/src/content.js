@@ -63,10 +63,14 @@
   let lastCodexHuntId = "";
   let lastCodexRender = "";
   let codexExpandedTier = -1;
+  let lastBossTelemetrySaveAt = 0;
+  const BOSS_RUN_SESSION_KEY = "baiakJarvisBossRunV1";
   const bossRun = {
     running: false, inFight: false, loopBusy: false, status: "idle", current: null,
     message: "Pronto para enfrentar os chefes favoritos disponíveis.",
-    attempted: [], results: [], wins: 0, charges: null, maxCharges: null
+    attempted: [], results: [], wins: 0, charges: null, maxCharges: null,
+    phase: "idle", previousWins: null, previousCharges: null, startedAt: 0,
+    fightStartedAt: 0, fightEndedAt: 0, xpBefore: {}, damageBaseline: {}, damagePeak: {}, damageReset: {}
   };
 
   const host = document.createElement("aside");
@@ -170,6 +174,7 @@
             <span id="bj-boss-progress">0 vitórias · 0 tentativas</span>
             <span id="bj-boss-charges">Cargas: —</span>
           </div>
+          <div id="bj-boss-summary" class="bj-boss-summary">XP total da run: aguardando a primeira vitória.</div>
           <div class="bj-boss-note">Cada entrada gasta uma carga, inclusive se a party perder. A run para após uma derrota, resultado incerto ou pedido de escolha de dificuldade. Parar não cancela uma luta já iniciada.</div>
           <div class="bj-section-title">NESTA RUN</div>
           <div id="bj-boss-history" class="bj-boss-history">Nenhum chefe enfrentado nesta run.</div>
@@ -662,19 +667,119 @@
     toggle.setAttribute("aria-pressed", String(bossRun.running));
     host.querySelector("#bj-boss-progress").textContent = `${bossRun.wins} vitória${bossRun.wins === 1 ? "" : "s"} · ${bossRun.attempted.length} tentativa${bossRun.attempted.length === 1 ? "" : "s"}`;
     host.querySelector("#bj-boss-charges").textContent = bossRun.charges == null ? "Cargas: —" : `Cargas: ${bossRun.charges}/${bossRun.maxCharges}`;
+    const measured = bossRun.results.filter((result) => Number.isFinite(result.xpTotal));
+    const totalXp = measured.reduce((sum, result) => sum + result.xpTotal, 0);
+    host.querySelector("#bj-boss-summary").textContent = measured.length
+      ? `XP total da run: ${formatNumber(totalXp)} · ${measured.length} chefe${measured.length === 1 ? "" : "s"} com XP medida`
+      : "XP total da run: aguardando medição.";
     host.querySelector("#bj-boss-history").innerHTML = bossRun.results?.length
-      ? bossRun.results.map((result) => `<div class="bj-boss-result"><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.outcome)}</span></div>`).join("")
+      ? bossRun.results.map((result) => `<article class="bj-boss-result">
+          <div class="bj-boss-result-head"><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.outcome)}</span></div>
+          <div class="bj-boss-result-stats"><span>XP: <b>${Number.isFinite(result.xpTotal) ? formatNumber(result.xpTotal) : "—"}</b></span><span>Tempo: <b>${Number.isFinite(result.durationSeconds) ? formatElapsed(result.durationSeconds) : "—"}</b></span></div>
+          ${result.xpByCharacter?.length ? `<div class="bj-boss-result-detail">XP por personagem: ${result.xpByCharacter.map((entry) => `${escapeHtml(entry.name)} <b>${formatNumber(entry.gain)}</b>`).join(" · ")}</div>` : ""}
+          ${result.damageLeader ? `<div class="bj-boss-result-leader">Maior dano somado: <b>${escapeHtml(result.damageLeader.name)} · ${formatNumber(result.damageLeader.total)}</b></div>` : ""}
+          ${result.damageByCharacter?.length ? `<div class="bj-boss-result-damage">${result.damageByCharacter.map((entry) => `<span>${escapeHtml(entry.name)} <b>${formatNumber(entry.total)}</b></span>`).join("")}</div>` : ""}
+        </article>`).join("")
       : "Nenhum chefe enfrentado nesta run.";
   }
 
   function setBossRunState(status, message) {
     bossRun.status = status;
     bossRun.message = message;
+    persistBossRun();
     renderBossRun();
+  }
+
+  function persistBossRun() {
+    try {
+      const { running, status, message, current, phase, attempted, results, wins, charges, maxCharges,
+        previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
+        damageBaseline, damagePeak, damageReset } = bossRun;
+      sessionStorage.setItem(BOSS_RUN_SESSION_KEY, JSON.stringify({
+        running, status, message, current, phase, attempted, results, wins, charges, maxCharges,
+        previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
+        damageBaseline, damagePeak, damageReset, updatedAt: Date.now()
+      }));
+    } catch (_error) { /* A run continua nesta página se o armazenamento da aba estiver indisponível. */ }
+  }
+
+  function restoreBossRun() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(BOSS_RUN_SESSION_KEY) || "null");
+      if (!saved || !Number.isFinite(saved.updatedAt) || Date.now() - saved.updatedAt > 24 * 60 * 60 * 1000
+        || !Array.isArray(saved.attempted) || !Array.isArray(saved.results)
+        || !["choosing", "entering", "fighting", "confirming"].includes(saved.phase)) {
+        sessionStorage.removeItem(BOSS_RUN_SESSION_KEY);
+        return false;
+      }
+      Object.assign(bossRun, saved, {
+        loopBusy: Boolean(saved.running),
+        inFight: Boolean(saved.running && ["entering", "fighting"].includes(saved.phase)),
+        damageReset: saved.damageReset || {}
+      });
+      if (!saved.running) {
+        renderBossRun();
+        return false;
+      }
+      setBossRunState("running", saved.current
+        ? `Retomando a run após ${saved.current}…`
+        : "Retomando a run de chefes favoritos…");
+      return true;
+    } catch (_error) { return false; }
   }
 
   function bossLocationMatches(name) {
     return core.normalizeLookup(document.querySelector("#wave-title")?.textContent) === core.normalizeLookup(name);
+  }
+
+  function bossFightVisible(name) {
+    return core.bossFightSignal({
+      name,
+      location: document.querySelector("#wave-title")?.textContent,
+      badgeText: document.querySelector("#bar-shooters .bar-pvp-tag")?.textContent,
+      partyManageTitle: document.querySelector("#party-manage")?.title
+    });
+  }
+
+  function readBossDamageTotals() {
+    const totals = {};
+    for (const row of document.querySelectorAll("#dps-list .row")) {
+      const name = core.clean(row.querySelector("span[title]")?.title);
+      const total = core.numberFromPtBr(row.querySelector("small")?.textContent);
+      if (name && Number.isFinite(total)) totals[core.normalizeLookup(name)] = { name, total };
+    }
+    return totals;
+  }
+
+  function sampleBossDamage() {
+    const current = readBossDamageTotals();
+    for (const [key, reading] of Object.entries(current)) {
+      const baseline = bossRun.damageBaseline[key]?.total;
+      if (!Number.isFinite(baseline)) continue;
+      if (reading.total < baseline) bossRun.damageReset[key] = true;
+      const delta = bossRun.damageReset[key] ? reading.total : reading.total - baseline;
+      const previous = bossRun.damagePeak[key]?.total || 0;
+      if (delta > previous) bossRun.damagePeak[key] = { name: reading.name, total: delta };
+    }
+    if (bossRun.running && Date.now() - lastBossTelemetrySaveAt > 3000) {
+      lastBossTelemetrySaveAt = Date.now();
+      persistBossRun();
+    }
+  }
+
+  async function readBossPartyXp() {
+    const previousScan = lastSkillsScanAt;
+    await scanSkillsPanel(true);
+    if (lastSkillsScanAt <= previousScan) return {};
+    const values = {};
+    const members = readPartyCharacters();
+    if (!members.length) return {};
+    for (const member of members) {
+      const xpTotal = profiles[member.name]?.xpTotal;
+      if (!Number.isFinite(xpTotal)) return {};
+      values[core.normalizeLookup(member.name)] = { name: member.name, xpTotal };
+    }
+    return values;
   }
 
   async function openBossPicker() {
@@ -753,7 +858,8 @@
   async function waitForBossEntry(name) {
     const started = Date.now();
     while (Date.now() - started < 20000) {
-      if (bossLocationMatches(name)) return;
+      sampleBossDamage();
+      if (bossFightVisible(name)) return;
       if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
         throw new Error(`${name} exige escolher a dificuldade no jogo. A run parou antes de gastar uma carga.`);
       }
@@ -766,10 +872,18 @@
   async function waitForBossExit(name) {
     const started = Date.now();
     let stable = 0;
+    let firstExitAt = null;
     while (Date.now() - started < 45 * 60 * 1000) {
       if (gameFailureDetected() || !navigator.onLine) throw new Error("O jogo desconectou durante a luta.");
-      stable = document.querySelector("#wave-title") && !bossLocationMatches(name) ? stable + 1 : 0;
-      if (stable >= 3) return;
+      sampleBossDamage();
+      if (document.querySelector("#wave-title") && !bossFightVisible(name)) {
+        firstExitAt ??= Date.now();
+        stable += 1;
+      } else {
+        firstExitAt = null;
+        stable = 0;
+      }
+      if (stable >= 3) return firstExitAt;
       await delay(1000);
     }
     throw new Error(`A luta com ${name} não terminou dentro do tempo de segurança. A run foi pausada.`);
@@ -796,11 +910,77 @@
     throw new Error(`Não foi possível confirmar o resultado de ${name}; a run foi pausada.`);
   }
 
+  function recordBossAttempt(name) {
+    if (!bossRun.attempted.some((attempted) => core.normalizeLookup(attempted) === core.normalizeLookup(name))) {
+      bossRun.attempted.push(name);
+    }
+    if (!bossRun.results.some((result) => result.name === name)) {
+      bossRun.results.push({ name, outcome: "Em andamento…" });
+    }
+  }
+
+  async function finishCurrentBoss() {
+    const name = bossRun.current;
+    if (!name) return;
+    if (bossRun.phase === "entering" && !bossFightVisible(name)) await delay(1500);
+    if (bossFightVisible(name)) {
+      recordBossAttempt(name);
+      bossRun.phase = "fighting";
+      bossRun.inFight = true;
+      setBossRunState("running", `Aguardando o fim da luta com ${name}…`);
+      bossRun.fightEndedAt = await waitForBossExit(name);
+    }
+    if (bossRun.phase !== "confirming") {
+      sampleBossDamage();
+      bossRun.fightEndedAt ||= Date.now();
+    }
+    const finishedAt = bossRun.fightEndedAt || Date.now();
+    bossRun.inFight = false;
+    bossRun.phase = "confirming";
+    setBossRunState("running", `Confirmando o resultado de ${name}…`);
+    const afterXp = await readBossPartyXp().catch(() => ({}));
+    const metrics = core.summarizeBossFight(bossRun.xpBefore, afterXp, bossRun.damagePeak,
+      bossRun.fightStartedAt ? (finishedAt - bossRun.fightStartedAt) / 1000 : null);
+    let result = bossRun.results.findLast((item) => item.name === name && item.outcome === "Em andamento…");
+    if (result) Object.assign(result, metrics);
+    const outcome = await confirmBossResult(name, bossRun.previousWins, bossRun.previousCharges);
+    if (!result) {
+      recordBossAttempt(name);
+      result = bossRun.results.findLast((item) => item.name === name && item.outcome === "Em andamento…");
+      if (result) Object.assign(result, metrics);
+    }
+    if (result) result.outcome = outcome === "victory" ? "Vitória" : "Derrota";
+    if (outcome === "victory") bossRun.wins += 1;
+    bossRun.current = null;
+    bossRun.phase = "choosing";
+    bossRun.previousWins = null;
+    bossRun.previousCharges = null;
+    bossRun.fightStartedAt = 0;
+    bossRun.fightEndedAt = 0;
+    bossRun.xpBefore = {};
+    bossRun.damageBaseline = {};
+    bossRun.damagePeak = {};
+    bossRun.damageReset = {};
+    if (!bossRun.running) {
+      setBossRunState("paused", `Luta com ${name} encerrada. A run está parada.`);
+    } else if (outcome !== "victory") {
+      bossRun.running = false;
+      setBossRunState("error", `${name}: derrota detectada. A run parou para preservar as cargas restantes.`);
+    } else {
+      setBossRunState("running", `${name} derrotado. Procurando o próximo favorito…`);
+    }
+  }
+
   async function runFavoriteBosses() {
-    let entryConfirmed = false;
     try {
       for (let index = 0; index < 100 && bossRun.running; index += 1) {
         if (automationBusy || refreshBusy) throw new Error("Outra ação do Jarvis está em andamento. Tente iniciar a run novamente.");
+        if (bossRun.current) {
+          await finishCurrentBoss();
+          if (bossRun.running) await delay(800);
+          continue;
+        }
+        const xpBefore = await readBossPartyXp().catch(() => ({}));
         const modal = await openBossPicker();
         if (!bossRun.running) break;
         const charges = readBossCharges(modal);
@@ -823,6 +1003,7 @@
         }
         const name = decision.name;
         bossRun.current = name;
+        bossRun.phase = "choosing";
         setBossRunState("running", `Abrindo ${name}…`);
         let cell = findBossCell(modal, name);
         if (!cell) throw new Error(`Não consegui identificar o card de ${name}.`);
@@ -840,31 +1021,23 @@
         if (!bossRun.running) break;
         const previous = cards.find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
         bossRun.inFight = true;
+        bossRun.phase = "entering";
+        bossRun.previousWins = previous?.wins ?? null;
+        bossRun.previousCharges = charges.left;
+        bossRun.fightStartedAt = Date.now();
+        bossRun.fightEndedAt = 0;
+        bossRun.xpBefore = xpBefore;
+        bossRun.damageBaseline = readBossDamageTotals();
+        bossRun.damagePeak = {};
+        bossRun.damageReset = {};
         setBossRunState("running", `Enfrentando ${name}…`);
         button.click();
         await waitForBossEntry(name);
-        entryConfirmed = true;
-        bossRun.attempted.push(name);
-        bossRun.results.push({ name, outcome: "Em andamento…" });
-        renderBossRun();
-        await waitForBossExit(name);
-        bossRun.inFight = false;
-        entryConfirmed = false;
-        const outcome = await confirmBossResult(name, previous?.wins, charges.left);
-        bossRun.results[bossRun.results.length - 1].outcome = outcome === "victory" ? "Vitória" : "Derrota";
-        if (outcome === "victory") bossRun.wins += 1;
-        renderBossRun();
-        if (!bossRun.running) {
-          setBossRunState("paused", `Luta com ${name} encerrada. A run está parada.`);
-          break;
-        }
-        if (outcome !== "victory") {
-          bossRun.running = false;
-          setBossRunState("error", `${name}: derrota detectada. A run parou para preservar as cargas restantes.`);
-          break;
-        }
-        setBossRunState("running", `${name} derrotado. Procurando o próximo favorito…`);
-        await delay(800);
+        recordBossAttempt(name);
+        bossRun.phase = "fighting";
+        setBossRunState("running", `Aguardando o fim da luta com ${name}…`);
+        await finishCurrentBoss();
+        if (bossRun.running) await delay(800);
       }
       if (bossRun.running) {
         bossRun.running = false;
@@ -872,9 +1045,9 @@
       }
     } catch (error) {
       bossRun.running = false;
-      const lastResult = bossRun.results[bossRun.results.length - 1];
-      if (lastResult?.outcome === "Em andamento…") lastResult.outcome = "Resultado não confirmado";
-      if (!entryConfirmed) bossRun.inFight = false;
+      const lastResult = bossRun.results.findLast((item) => item.outcome === "Em andamento…");
+      if (lastResult) lastResult.outcome = "Resultado não confirmado";
+      bossRun.inFight = Boolean(bossRun.current && bossFightVisible(bossRun.current));
       if (!bossRun.inFight) bossRun.current = null;
       setBossRunState("error", `${error.message} Nenhum outro chefe será iniciado.`);
     }
@@ -901,9 +1074,11 @@
       running: true, inFight: false, status: "running", current: null,
       loopBusy: true,
       message: "Lendo os chefes favoritos e as cargas…", attempted: [], results: [],
-      wins: 0, charges: null, maxCharges: null
+      wins: 0, charges: null, maxCharges: null, phase: "choosing",
+      previousWins: null, previousCharges: null, startedAt: Date.now(),
+      fightStartedAt: 0, fightEndedAt: 0, xpBefore: {}, damageBaseline: {}, damagePeak: {}, damageReset: {}
     });
-    renderBossRun();
+    setBossRunState("running", bossRun.message);
     runFavoriteBosses().finally(() => { bossRun.loopBusy = false; renderBossRun(); });
   }
 
@@ -2210,7 +2385,9 @@
       && Number.isFinite(bjDailyXp.waves) && bjDailyXp.waves >= 0;
     dailyXp = validDaily ? bjDailyXp : core.dailyHuntXp(huntRuns, today);
     if (!validDaily) ext.storage.local.set({ bjDailyXp: dailyXp }).catch(() => {});
+    const resumeBossRun = restoreBossRun();
     schedule();
+    if (resumeBossRun) runFavoriteBosses().finally(() => { bossRun.loopBusy = false; renderBossRun(); });
     setTimeout(() => scanHuntOptions(false).catch(() => {}), 1500);
   });
 
