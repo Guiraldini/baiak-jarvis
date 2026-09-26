@@ -884,7 +884,7 @@
         stable = 0;
       }
       if (stable >= 3) return firstExitAt;
-      await delay(1000);
+      await delay(250);
     }
     throw new Error(`A luta com ${name} não terminou dentro do tempo de segurança. A run foi pausada.`);
   }
@@ -2414,6 +2414,7 @@
   if (gameRoot) {
     new MutationObserver(() => {
       if (!skillsScanBusy && !huntScanBusy) lastGameMutationAt = Date.now();
+      if (bossRun.inFight) sampleBossDamage();
     }).observe(gameRoot, {
       subtree: true, childList: true, characterData: true, attributes: true
     });
