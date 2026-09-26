@@ -2,6 +2,15 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.12
+
+- adiciona a aba **Chefes** com botão para iniciar e parar uma run dos chefes marcados como favoritos no jogo;
+- localiza o botão **Enfrentar** dentro do card selecionado, mesmo quando a posição dos cards muda;
+- usa somente chefes prontos, verifica as cargas e confirma cada resultado antes de iniciar o próximo;
+- interrompe a sequência após derrota, desconexão, resultado incerto ou escolha de dificuldade que precise ser feita no jogo;
+- suspende a troca automática entre treino e hunt durante a run; o botão **Parar run** não cancela uma luta já iniciada;
+- não usa a assinatura Auto Boss do jogo. A run começa apenas pelo botão do Jarvis e não é retomada automaticamente depois de recarregar a página.
+
 ## Versão 0.8.11
 
 - adiciona a aba **Sets**, com recomendações por personagem a partir de nível, vocação e prioridade escolhida;
@@ -96,7 +105,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.11.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.12.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -107,7 +116,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.11.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.12.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.

@@ -635,6 +635,22 @@
     return null;
   }
 
+  function bossRunDecision(cards, attempted, chargesLeft) {
+    if (!Number.isFinite(chargesLeft)) return { type: "stop", reason: "charges-unknown" };
+    if (chargesLeft <= 0) return { type: "stop", reason: "no-charges" };
+    const favorites = Array.isArray(cards) ? cards.filter((card) => card.favorite) : [];
+    if (!favorites.length) return { type: "stop", reason: "no-favorites" };
+    const visited = new Set((attempted || []).map(normalizeLookup));
+    const ready = favorites.filter((card) => card.ready && !visited.has(normalizeLookup(card.name)));
+    if (!ready.length) return { type: "stop", reason: "none-ready" };
+    const chosen = ready[0];
+    const name = normalizeLookup(chosen.name);
+    if (!name || favorites.filter((card) => normalizeLookup(card.name) === name).length !== 1) {
+      return { type: "stop", reason: "ambiguous-boss" };
+    }
+    return { type: "fight", name: chosen.name };
+  }
+
   function recommendation(id, severity, title, detail) {
     return { id, severity, title, detail };
   }
@@ -702,6 +718,7 @@
   return {
     buildRecommendations,
     bossModeDetected,
+    bossRunDecision,
     addDailyHuntRun,
     archiveHuntRuns,
     brazilDayKey,

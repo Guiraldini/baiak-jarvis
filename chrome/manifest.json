@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Baiak Jarvis AUTO",
-  "version": "0.8.11",
-  "description": "Copiloto local para acompanhar e automatizar o ciclo de stamina no Baiak Idle.",
+  "version": "0.8.12",
+  "description": "Copiloto local para stamina, hunts, sets e run de chefes favoritos no Baiak Idle.",
   "permissions": ["storage", "activeTab", "tabs", "alarms"],
   "host_permissions": [
     "https://baiakidle.com/*",

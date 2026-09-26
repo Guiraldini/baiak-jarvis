@@ -43,6 +43,11 @@
   let selectedHuntKey = null;
   let selectedSetCharacter = null;
   let knownStaminaMaxMinutes = 42 * 60;
+  const bossRun = {
+    running: false, inFight: false, loopBusy: false, status: "idle", current: null,
+    message: "Pronto para enfrentar os chefes favoritos disponíveis.",
+    attempted: [], results: [], wins: 0, charges: null, maxCharges: null
+  };
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
@@ -58,6 +63,7 @@
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
         <button type="button" data-action="view-hunts" aria-selected="false">Hunts</button>
+        <button type="button" data-action="view-bosses" aria-selected="false">Chefes</button>
         <button type="button" data-action="view-sets" aria-selected="false">Sets</button>
         <button type="button" data-action="view-optimizer" aria-selected="false">Otimizador</button>
       </nav>
@@ -104,6 +110,23 @@
           <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
           <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
           <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
+        </div>
+      </section>
+      <section class="bj-view bj-view-hidden" id="bj-view-bosses">
+        <div class="bj-boss-view">
+          <div class="bj-boss-heading"><strong>RUN DE CHEFES FAVORITOS</strong><small>Usa apenas os chefes marcados com ★ que estiverem disponíveis no jogo.</small></div>
+          <div class="bj-boss-status" id="bj-boss-status" data-status="idle">
+            <span class="bj-boss-dot"></span><strong id="bj-boss-state">Pronto</strong>
+            <span id="bj-boss-message">Pronto para enfrentar os chefes favoritos disponíveis.</span>
+          </div>
+          <div class="bj-boss-controls">
+            <button type="button" data-action="toggle-boss-run" id="bj-boss-toggle">Iniciar run</button>
+            <span id="bj-boss-progress">0 vitórias · 0 tentativas</span>
+            <span id="bj-boss-charges">Cargas: —</span>
+          </div>
+          <div class="bj-boss-note">Cada entrada gasta uma carga, inclusive se a party perder. A run para após uma derrota, resultado incerto ou pedido de escolha de dificuldade. Parar não cancela uma luta já iniciada.</div>
+          <div class="bj-section-title">NESTA RUN</div>
+          <div id="bj-boss-history" class="bj-boss-history">Nenhum chefe enfrentado nesta run.</div>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-sets">
@@ -388,6 +411,7 @@
       <article class="bj-recommendation bj-${item.severity}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></article>`).join("");
     maybeLoadStage(snapshot.location).catch(() => {});
     maybeAutomate(snapshot).catch(() => {});
+    renderBossRun();
   }
 
   function setAutoState(status, message) {
@@ -426,13 +450,15 @@
   }
 
   async function switchView(view, persist = false) {
-    const selected = ["dashboard", "hunts", "sets", "optimizer"].includes(view) ? view : "dashboard";
+    const selected = ["dashboard", "hunts", "bosses", "sets", "optimizer"].includes(view) ? view : "dashboard";
     host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
     host.querySelector("#bj-view-hunts").classList.toggle("bj-view-hidden", selected !== "hunts");
+    host.querySelector("#bj-view-bosses").classList.toggle("bj-view-hidden", selected !== "bosses");
     host.querySelector("#bj-view-sets").classList.toggle("bj-view-hidden", selected !== "sets");
     host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
     host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
     host.querySelector('[data-action="view-hunts"]').setAttribute("aria-selected", String(selected === "hunts"));
+    host.querySelector('[data-action="view-bosses"]').setAttribute("aria-selected", String(selected === "bosses"));
     host.querySelector('[data-action="view-sets"]').setAttribute("aria-selected", String(selected === "sets"));
     host.querySelector('[data-action="view-optimizer"]').setAttribute("aria-selected", String(selected === "optimizer"));
     if (selected === "optimizer") {
@@ -473,6 +499,266 @@
       await delay(50);
     }
     return null;
+  }
+
+  function renderBossRun() {
+    const panel = host.querySelector("#bj-boss-status");
+    if (!panel) return;
+    panel.dataset.status = bossRun.status;
+    host.querySelector("#bj-boss-state").textContent = ({
+      idle: "Pronto", running: "Em execução", stopping: "Parando", complete: "Concluída",
+      paused: "Parada", error: "Atenção"
+    })[bossRun.status] || "Pronto";
+    host.querySelector("#bj-boss-message").textContent = bossRun.message;
+    const toggle = host.querySelector("#bj-boss-toggle");
+    toggle.textContent = bossRun.running ? "Parar run" : bossRun.inFight ? "Aguardando luta" : "Iniciar run";
+    toggle.disabled = !bossRun.running && bossRun.inFight;
+    toggle.setAttribute("aria-pressed", String(bossRun.running));
+    host.querySelector("#bj-boss-progress").textContent = `${bossRun.wins} vitória${bossRun.wins === 1 ? "" : "s"} · ${bossRun.attempted.length} tentativa${bossRun.attempted.length === 1 ? "" : "s"}`;
+    host.querySelector("#bj-boss-charges").textContent = bossRun.charges == null ? "Cargas: —" : `Cargas: ${bossRun.charges}/${bossRun.maxCharges}`;
+    host.querySelector("#bj-boss-history").innerHTML = bossRun.results?.length
+      ? bossRun.results.map((result) => `<div class="bj-boss-result"><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.outcome)}</span></div>`).join("")
+      : "Nenhum chefe enfrentado nesta run.";
+  }
+
+  function setBossRunState(status, message) {
+    bossRun.status = status;
+    bossRun.message = message;
+    renderBossRun();
+  }
+
+  function bossLocationMatches(name) {
+    return core.normalizeLookup(document.querySelector("#wave-title")?.textContent) === core.normalizeLookup(name);
+  }
+
+  async function openBossPicker() {
+    if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
+      throw new Error("Há uma escolha de dificuldade aberta. Conclua ou feche essa escolha no jogo antes de iniciar a run.");
+    }
+    if (isVisible(document.querySelector("#confirm-modal"))) {
+      throw new Error("Há uma confirmação aberta no jogo. Feche-a antes de iniciar a run.");
+    }
+    let modal = document.querySelector("#boss-modal");
+    if (!isVisible(modal)) {
+      const toggle = document.querySelector("#wave-title");
+      if (!toggle) throw new Error("O seletor de atividades do jogo não apareceu.");
+      if (!isVisible(document.querySelector("#teleport-menu"))) toggle.click();
+      const option = await waitForElement('#teleport-menu .tp-opt[data-tp="boss"]', 3000);
+      if (!option) throw new Error("A opção Chefes não apareceu nos teleportes.");
+      if (option.disabled) throw new Error(option.title || "A opção Chefes está indisponível no jogo.");
+      option.click();
+      modal = await waitForElement("#boss-modal", 5000);
+      if (!modal) throw new Error("A janela de Chefes não abriu.");
+    }
+    const list = modal.querySelector(".boss-pane-list");
+    if (!list) throw new Error("A lista de chefes não apareceu.");
+    if (!isVisible(list)) {
+      const listTab = [...modal.querySelectorAll(".sp-cats .sp-cat")].find((button) => /^bosses?/.test(core.normalizeLookup(button.textContent)));
+      if (!listTab) throw new Error("A seção Bosses não foi encontrada.");
+      listTab.click();
+    }
+    if (!isVisible(list)) throw new Error("A seção Bosses não abriu.");
+    const favorites = list.querySelector(".pick-leanbtn.fav");
+    if (!favorites) throw new Error("O filtro Favoritos não apareceu.");
+    const search = list.querySelector(".pick-search");
+    if (search?.value.trim()) setSearchValue(search, "");
+    const rarityAll = [...list.querySelectorAll(".pick-leanbtn")]
+      .find((button) => /^(todos|all)$/.test(core.normalizeLookup(button.textContent)));
+    if (rarityAll && !rarityAll.classList.contains("on")) rarityAll.click();
+    const readyOnly = list.querySelector(".pick-leanbtn.ready");
+    if (readyOnly?.classList.contains("on")) readyOnly.click();
+    if (!favorites.classList.contains("on")) {
+      favorites.click();
+      await delay(150);
+    }
+    if (!favorites.classList.contains("on")) throw new Error("Não foi possível ativar o filtro Favoritos.");
+    return modal;
+  }
+
+  function readBossCharges(modal) {
+    const text = modal.querySelector(".boss-global:not(.boss-pass)")?.textContent || "";
+    const match = text.match(/(\d+)\s*\/\s*(\d+)/);
+    return match ? { left: Number(match[1]), max: Number(match[2]) } : null;
+  }
+
+  function readFavoriteBossCards(modal) {
+    return [...modal.querySelectorAll(".boss-pane-list .boss-cardgrid .boss-cell")].map((cell) => {
+      const name = core.clean(cell.querySelector(".boss-cell-name")?.textContent);
+      const meta = core.normalizeLookup(cell.querySelector(".boss-cell-meta")?.textContent);
+      const wins = meta.match(/(\d+)\s*(?:vitorias|kills)/);
+      return {
+        name,
+        favorite: Boolean(cell.querySelector(".boss-cell-fav.on")),
+        ready: Boolean(cell.querySelector(".boss-cell-go:not(:disabled)")),
+        active: cell.classList.contains("active"),
+        cooldown: cell.classList.contains("locked"),
+        wins: wins ? Number(wins[1]) : null
+      };
+    }).filter((card) => card.name);
+  }
+
+  function findBossCell(modal, name) {
+    const wanted = core.normalizeLookup(name);
+    const cells = [...modal.querySelectorAll(".boss-pane-list .boss-cardgrid .boss-cell")]
+      .filter((cell) => core.normalizeLookup(cell.querySelector(".boss-cell-name")?.textContent) === wanted);
+    return cells.length === 1 ? cells[0] : null;
+  }
+
+  async function waitForBossEntry(name) {
+    const started = Date.now();
+    while (Date.now() - started < 20000) {
+      if (bossLocationMatches(name)) return;
+      if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
+        throw new Error(`${name} exige escolher a dificuldade no jogo. A run parou antes de gastar uma carga.`);
+      }
+      if (gameFailureDetected() || !navigator.onLine) throw new Error("O jogo desconectou antes de confirmar a entrada no chefe.");
+      await delay(250);
+    }
+    throw new Error(`O jogo não confirmou a entrada em ${name}. Se apareceu uma escolha de dificuldade, faça essa luta manualmente.`);
+  }
+
+  async function waitForBossExit(name) {
+    const started = Date.now();
+    let stable = 0;
+    while (Date.now() - started < 45 * 60 * 1000) {
+      if (gameFailureDetected() || !navigator.onLine) throw new Error("O jogo desconectou durante a luta.");
+      stable = document.querySelector("#wave-title") && !bossLocationMatches(name) ? stable + 1 : 0;
+      if (stable >= 3) return;
+      await delay(1000);
+    }
+    throw new Error(`A luta com ${name} não terminou dentro do tempo de segurança. A run foi pausada.`);
+  }
+
+  async function confirmBossResult(name, previousWins, previousCharges) {
+    const modal = await openBossPicker();
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const card = readFavoriteBossCards(modal).find((item) => core.normalizeLookup(item.name) === core.normalizeLookup(name));
+      const charges = readBossCharges(modal);
+      if (charges) {
+        bossRun.charges = charges.left;
+        bossRun.maxCharges = charges.max;
+      }
+      if (!card) throw new Error(`O chefe ${name} desapareceu dos favoritos; resultado não confirmado.`);
+      if (card.active) {
+        await delay(500);
+        continue;
+      }
+      if (Number.isFinite(card.wins) && Number.isFinite(previousWins) && card.wins > previousWins) return "victory";
+      if (card.cooldown && charges && charges.left < previousCharges && attempt >= 18) return "defeat";
+      await delay(500);
+    }
+    throw new Error(`Não foi possível confirmar o resultado de ${name}; a run foi pausada.`);
+  }
+
+  async function runFavoriteBosses() {
+    let entryConfirmed = false;
+    try {
+      for (let index = 0; index < 100 && bossRun.running; index += 1) {
+        if (automationBusy || refreshBusy) throw new Error("Outra ação do Jarvis está em andamento. Tente iniciar a run novamente.");
+        const modal = await openBossPicker();
+        if (!bossRun.running) break;
+        const charges = readBossCharges(modal);
+        if (!charges) throw new Error("Não consegui ler as cargas de boss; nenhuma luta será iniciada.");
+        bossRun.charges = charges.left;
+        bossRun.maxCharges = charges.max;
+        const cards = readFavoriteBossCards(modal);
+        const decision = core.bossRunDecision(cards, bossRun.attempted, charges.left);
+        if (decision.type === "stop") {
+          const messages = {
+            "no-charges": "Cargas esgotadas. A run terminou.",
+            "no-favorites": "Não há chefes marcados como favoritos.",
+            "none-ready": "Todos os favoritos disponíveis foram enfrentados ou estão em recarga.",
+            "ambiguous-boss": "Há chefes com nomes iguais na lista. A run parou para evitar um clique errado.",
+            "charges-unknown": "Não consegui confirmar as cargas de boss."
+          };
+          bossRun.running = false;
+          setBossRunState(decision.reason === "ambiguous-boss" || decision.reason === "charges-unknown" ? "error" : "complete", messages[decision.reason]);
+          break;
+        }
+        const name = decision.name;
+        bossRun.current = name;
+        setBossRunState("running", `Abrindo ${name}…`);
+        let cell = findBossCell(modal, name);
+        if (!cell) throw new Error(`Não consegui identificar o card de ${name}.`);
+        if (!cell.classList.contains("expanded")) cell.click();
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          cell = findBossCell(modal, name);
+          if (cell?.classList.contains("expanded") && isVisible(cell.querySelector(".boss-cell-go"))) break;
+          await delay(100);
+        }
+        const button = cell?.querySelector(".boss-cell-go");
+        if (!cell?.classList.contains("expanded") || !cell.querySelector(".boss-cell-fav.on")
+          || !isVisible(button) || button.disabled || readBossCharges(modal)?.left <= 0) {
+          throw new Error(`O botão Enfrentar de ${name} não está disponível.`);
+        }
+        if (!bossRun.running) break;
+        const previous = cards.find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
+        bossRun.inFight = true;
+        setBossRunState("running", `Enfrentando ${name}…`);
+        button.click();
+        await waitForBossEntry(name);
+        entryConfirmed = true;
+        bossRun.attempted.push(name);
+        bossRun.results.push({ name, outcome: "Em andamento…" });
+        renderBossRun();
+        await waitForBossExit(name);
+        bossRun.inFight = false;
+        entryConfirmed = false;
+        const outcome = await confirmBossResult(name, previous?.wins, charges.left);
+        bossRun.results[bossRun.results.length - 1].outcome = outcome === "victory" ? "Vitória" : "Derrota";
+        if (outcome === "victory") bossRun.wins += 1;
+        renderBossRun();
+        if (!bossRun.running) {
+          setBossRunState("paused", `Luta com ${name} encerrada. A run está parada.`);
+          break;
+        }
+        if (outcome !== "victory") {
+          bossRun.running = false;
+          setBossRunState("error", `${name}: derrota detectada. A run parou para preservar as cargas restantes.`);
+          break;
+        }
+        setBossRunState("running", `${name} derrotado. Procurando o próximo favorito…`);
+        await delay(800);
+      }
+      if (bossRun.running) {
+        bossRun.running = false;
+        setBossRunState("error", "A run atingiu o limite de 100 tentativas e parou.");
+      }
+    } catch (error) {
+      bossRun.running = false;
+      const lastResult = bossRun.results[bossRun.results.length - 1];
+      if (lastResult?.outcome === "Em andamento…") lastResult.outcome = "Resultado não confirmado";
+      if (!entryConfirmed) bossRun.inFight = false;
+      if (!bossRun.inFight) bossRun.current = null;
+      setBossRunState("error", `${error.message} Nenhum outro chefe será iniciado.`);
+    }
+  }
+
+  function toggleBossRun() {
+    if (bossRun.running) {
+      bossRun.running = false;
+      setBossRunState(bossRun.inFight ? "stopping" : "paused", bossRun.inFight
+        ? "Parando após a luta atual. Nenhum outro chefe será iniciado."
+        : "Run parada. Nenhum outro chefe será iniciado.");
+      return;
+    }
+    if (bossRun.inFight) return;
+    if (bossRun.loopBusy) {
+      setBossRunState("paused", "Aguarde a execução anterior terminar antes de iniciar outra run.");
+      return;
+    }
+    if (automationBusy || refreshBusy) {
+      setBossRunState("error", "Aguarde a ação atual do Jarvis terminar antes de iniciar a run.");
+      return;
+    }
+    Object.assign(bossRun, {
+      running: true, inFight: false, status: "running", current: null,
+      loopBusy: true,
+      message: "Lendo os chefes favoritos e as cargas…", attempted: [], results: [],
+      wins: 0, charges: null, maxCharges: null
+    });
+    renderBossRun();
+    runFavoriteBosses().finally(() => { bossRun.loopBusy = false; renderBossRun(); });
   }
 
   function setSearchValue(input, value) {
@@ -614,7 +900,9 @@
   }
 
   async function maybeAutomate(snapshot) {
-    if (!settings.automationEnabled || automationBusy || refreshBusy) return;
+    if (!settings.automationEnabled || automationBusy || refreshBusy || bossRun.running || bossRun.inFight
+      || isVisible(document.querySelector("#confirm-modal .bdiff"))
+      || (bossRun.current && bossLocationMatches(bossRun.current))) return;
     const decision = core.automationDecision(snapshot, {
       enabled: true,
       huntName: settings.huntName || "Cobras",
@@ -1251,7 +1539,7 @@
         type: "bj:heartbeat",
         online: navigator.onLine,
         errorDetected: gameFailureDetected(),
-        stalled: !document.hidden && Date.now() - lastGameMutationAt > 3 * 60 * 1000,
+        stalled: !document.hidden && !bossRun.inFight && Date.now() - lastGameMutationAt > 3 * 60 * 1000,
         location: latestSnapshot?.location || null,
         stamina: latestSnapshot?.stamina?.time || null
       });
@@ -1269,7 +1557,10 @@
     minimizeButton.textContent = settings.minimized ? "+" : "−";
     minimizeButton.title = settings.minimized ? "Expandir" : "Minimizar";
     switchView(settings.activeView || "dashboard", false).catch(() => {});
-    if (!settings.enabled) return;
+    if (!settings.enabled) {
+      if (bossRun.running) toggleBossRun();
+      return;
+    }
     tick();
     timer = setInterval(tick, Math.max(750, Number(settings.intervalMs) || defaults.intervalMs));
   }
@@ -1291,8 +1582,10 @@
     }
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
+    if (action === "view-bosses") await switchView("bosses", true);
     if (action === "view-sets") await switchView("sets", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
+    if (action === "toggle-boss-run") toggleBossRun();
     if (action === "select-set-character") {
       selectedSetCharacter = event.target.closest("button")?.dataset.name || null;
       renderSets();

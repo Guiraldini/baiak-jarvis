@@ -267,4 +267,21 @@ assert.equal(core.automationDecision({
   stamina: { time: "12:00", percent: 29 }
 }, { enabled: true, huntName: "Cobras", vipActive: true }), null);
 
+const bossCards = [
+  { name: "Ahau", favorite: true, ready: false },
+  { name: "Prince Drazzak", favorite: true, ready: true },
+  { name: "Lady Tenebris", favorite: true, ready: true },
+  { name: "Sem estrela", favorite: false, ready: true }
+];
+assert.deepEqual(core.bossRunDecision(bossCards, [], 3), { type: "fight", name: "Prince Drazzak" });
+assert.deepEqual(core.bossRunDecision(bossCards, ["Prince Drazzak"], 2), { type: "fight", name: "Lady Tenebris" });
+assert.deepEqual(core.bossRunDecision(bossCards, ["Prince Drazzak", "Lady Tenebris"], 1), { type: "stop", reason: "none-ready" });
+assert.deepEqual(core.bossRunDecision(bossCards, [], 0), { type: "stop", reason: "no-charges" });
+assert.deepEqual(core.bossRunDecision(bossCards, [], NaN), { type: "stop", reason: "charges-unknown" });
+assert.deepEqual(core.bossRunDecision([{ name: "Outro", favorite: false, ready: true }], [], 3), { type: "stop", reason: "no-favorites" });
+assert.deepEqual(core.bossRunDecision([
+  { name: "Ahau", favorite: true, ready: true },
+  { name: "Áhau", favorite: true, ready: true }
+], [], 3), { type: "stop", reason: "ambiguous-boss" });
+
 console.log("core.test.js: todos os testes passaram");
