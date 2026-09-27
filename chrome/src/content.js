@@ -1305,19 +1305,31 @@
   }
 
   async function waitForBossButton(modal, name) {
+    const CARD_SETTLE_MS = 3500;
     let readyButton = null;
     let readySince = 0;
+    let expandedCell = null;
+    let expandedSince = 0;
     for (let attempt = 0; attempt < 40 && bossRun.running; attempt += 1) {
       const cell = findBossCell(modal, name);
       if (cell && !cell.classList.contains("expanded")) cell.click();
       const button = cell?.querySelector(".boss-cell-go");
+      if (cell?.isConnected && cell.classList.contains("expanded")) {
+        if (expandedCell !== cell) {
+          expandedCell = cell;
+          expandedSince = Date.now();
+        }
+      } else {
+        expandedCell = null;
+      }
       if (cell?.isConnected && cell.classList.contains("expanded") && cell.querySelector(".boss-cell-fav.on")
         && isVisible(button) && !button.disabled && readBossCharges(modal)?.left > 0) {
         if (readyButton !== button) {
           readyButton = button;
           readySince = Date.now();
         }
-        if (Date.now() - readySince >= 1200 && button.isConnected) return button;
+        if (Date.now() - expandedSince >= CARD_SETTLE_MS && Date.now() - readySince >= 1200
+          && button.isConnected) return button;
       } else {
         readyButton = null;
       }
