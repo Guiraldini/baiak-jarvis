@@ -594,14 +594,17 @@
   }
 
   async function configureGameAutoCodex(best) {
-    if (isVisible(document.querySelector("#codex-modal"))
-      || isVisible(document.querySelector("#confirm-modal"))
+    if (isVisible(document.querySelector("#confirm-modal"))
       || isVisible(document.querySelector("#boss-modal"))
       || isVisible(document.querySelector("#house-modal"))) return false;
-    const opener = document.querySelector("#tab-codex");
-    if (!isVisible(opener)) throw new Error("A aba Codex do jogo não está disponível.");
-    opener.click();
-    const modal = await waitForElement("#codex-modal", 5000);
+    let modal = document.querySelector("#codex-modal");
+    const openedHere = !isVisible(modal);
+    if (openedHere) {
+      const opener = document.querySelector("#tab-codex");
+      if (!opener) throw new Error("A aba Codex do jogo não está disponível.");
+      opener.click();
+      modal = await waitForElement("#codex-modal", 5000);
+    }
     if (!modal) throw new Error("O Codex do jogo não abriu.");
     let displacedTarget = "";
     let displacedManualTarget = false;
@@ -697,7 +700,7 @@
       }
       throw error;
     } finally {
-      if (isVisible(modal) && !isVisible(document.querySelector("#confirm-modal"))) modal.querySelector("#codex-modal-close")?.click();
+      if (openedHere && isVisible(modal) && !isVisible(document.querySelector("#confirm-modal"))) modal.querySelector("#codex-modal-close")?.click();
     }
   }
 
@@ -742,14 +745,18 @@
 
   async function releaseGameAutoCodex() {
     if ((!settings.codexAutoOwnedTarget && !settings.codexAutoPreviousTarget) || !codexAutoGame || codexAutoBusy) return;
-    if (isVisible(document.querySelector("#codex-modal")) || isVisible(document.querySelector("#confirm-modal"))
+    if (isVisible(document.querySelector("#confirm-modal"))
       || bossRun.running || bossRun.inFight) return;
     codexAutoBusy = true;
     try {
-      const opener = document.querySelector("#tab-codex");
-      if (!isVisible(opener)) throw new Error("Abra o jogo para desligar a entrega do Codex.");
-      opener.click();
-      const modal = await waitForElement("#codex-modal", 5000);
+      let modal = document.querySelector("#codex-modal");
+      const openedHere = !isVisible(modal);
+      if (openedHere) {
+        const opener = document.querySelector("#tab-codex");
+        if (!opener) throw new Error("Abra o jogo para desligar a entrega do Codex.");
+        opener.click();
+        modal = await waitForElement("#codex-modal", 5000);
+      }
       if (!modal) throw new Error("O Codex do jogo não abriu.");
       try {
         gameCodexTab(modal, "Auto Collect")?.click();
@@ -786,7 +793,7 @@
         codexAutoMessage = "Entrega automática desligada.";
         return true;
       } finally {
-        if (isVisible(modal)) modal.querySelector("#codex-modal-close")?.click();
+        if (openedHere && isVisible(modal)) modal.querySelector("#codex-modal-close")?.click();
       }
     } catch (error) {
       codexAutoMessage = error.message;

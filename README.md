@@ -2,6 +2,11 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.27
+
+- corrige a abertura do Codex quando o botão do jogo está oculto dentro do menu;
+- permite que a Auto entrega use a janela do Codex que já estiver aberta, sem fechá-la ao terminar.
+
 ## Versão 0.8.26
 
 - procura materiais em toda a Loot Pouch e escolhe códex liberados de hunts ou chefes, sem depender da hunt atual nem dos favoritos;
@@ -202,7 +207,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.26.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.27.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -213,7 +218,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.26.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.27.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -241,4 +246,4 @@ node .\tests\recovery.test.js
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.26 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.27 AUTO · execução local`.
