@@ -27,4 +27,28 @@ assert.deepEqual(core.codexItemNeeds("sword", 1, tierCatalog, { done: [], prog: 
 assert.equal(core.codexItemNeeds("sword", 2, tierCatalog, { done: [], prog: {} }).length, 1);
 assert.deepEqual(core.codexItemNeeds("sword", 2, tierCatalog, { done: [], prog: { "set-test-2": [1] } }), []);
 
+const rankingCatalog = {
+  missions: [
+    { id: "hunt-near", title: "Quase pronta" },
+    { id: "hunt-far", title: "Distante" },
+    { id: "hunt-locked-2", title: "Bloqueada" },
+    { id: "set-gear", title: "Equipamento" }
+  ],
+  items: {
+    flower: [[0, 0, 10, null, null, false], [1, 0, 100, null, null, false], [2, 0, 1, null, null, false]],
+    leaf: [[0, 1, 5, null, null, false], [1, 1, 100, null, null, false]],
+    sword: [[3, 0, 1, null, null, false]]
+  }
+};
+const best = core.bestCodexMission([
+  { name: "flower", count: 3, tier: 0, material: true },
+  { name: "sword", count: 1, tier: 0, material: false }
+], rankingCatalog, { done: [], unlocked: [], prog: { "hunt-near": [8, 5], "hunt-far": [1, 0] } });
+assert.deepEqual(best, { id: "hunt-near", title: "Quase pronta", available: 2, missingAfterPouch: 0 });
+assert.equal(core.bestCodexMission([{ name: "sword", count: 1, tier: 0, material: false }], rankingCatalog,
+  { done: [], unlocked: [], prog: {} }), null);
+assert.deepEqual(core.bestCodexMission([{ name: "flower", count: 1, tier: 0, material: true }], rankingCatalog,
+  { done: ["hunt-near", "hunt-far", "hunt-locked"], unlocked: ["hunt-locked-2"], prog: {} })?.id,
+"hunt-locked-2");
+
 console.log("loot-codex.test.js: todos os testes passaram");

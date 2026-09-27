@@ -60,6 +60,9 @@ assert.equal(snapshot.gold, 74774148);
 assert.equal(snapshot.characters.length, 3);
 assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").level, 234);
 assert.equal(snapshot.characters.find((item) => item.name === "Steelguard").role, "TANK");
+const monk = core.parseSnapshot({ text: "Party\nDPS Mox Monk · lvl 433\nTraining Information\nMox · Monk · Fist 100 (25%)\nStamina 7:00 16%", title: "Baiak", location: "Casa", now: 12345 });
+assert.equal(monk.characters.find((item) => item.name === "Mox")?.vocation, "Monk");
+assert.equal(monk.characters.find((item) => item.name === "Mox")?.skillType, "Fist");
 
 const activeParty = core.activePartyCharacters([
   { name: "stz", vocation: "Knight", level: 470, skillLevel: 100 },
@@ -204,6 +207,14 @@ assert.deepEqual(core.automationDecision({
   stamina: { time: "22:46", percent: 54, maxMinutes: 2535 }
 }, { enabled: true, huntName: "Cobras", vipActive: true }), {
   type: "hunt", target: "Cobras", reason: "Stamina chegou a 22h46 (54%)."
+});
+const houseWithStaleHuntTitle = { ...snapshot, location: "Livraria FIRE", activity: "caçando", isTraining: true,
+  stamina: { time: "18:25", percent: 43, maxMinutes: 2535 } };
+assert.equal(core.staminaPlan(houseWithStaleHuntTitle, { vipActive: true }).action, "CONTINUE TREINANDO");
+assert.deepEqual(core.automationDecision({ ...houseWithStaleHuntTitle,
+  stamina: { time: "22:46", percent: 54, maxMinutes: 2535 } },
+{ enabled: true, huntName: "Livraria FIRE", vipActive: true, trainingMode: "house" }), {
+  type: "hunt", target: "Livraria FIRE", reason: "Stamina chegou a 22h46 (54%)."
 });
 
 const huntingSnapshot = {

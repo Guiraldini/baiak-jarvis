@@ -5,7 +5,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VOCATIONS = "Druid|Knight|Sorcerer|Paladin";
+  const VOCATIONS = "Druid|Knight|Sorcerer|Paladin|Monk";
   const brazilDayFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit"
   });
@@ -62,7 +62,7 @@
     const results = [];
     const seen = new Set();
     const trainingPattern = new RegExp(
-      `([A-Za-zÀ-ÿ0-9_-]{2,24})\\s*[·|]\\s*(${VOCATIONS})\\s*[·|]\\s*(Magic|Melee|Distance|Shielding)\\s*(\\d+)\\s*\\((\\d+)%\\)`,
+      `([A-Za-zÀ-ÿ0-9_-]{2,24})\\s*[·|]\\s*(${VOCATIONS})\\s*[·|]\\s*(Magic|Melee|Distance|Fist|Shielding)\\s*(\\d+)\\s*\\((\\d+)%\\)`,
       "gi"
     );
     let match;
@@ -363,7 +363,7 @@
     const trainingGain = config.trainingDurationMinutes * config.trainingRate;
     const huntCeiling = Math.min(config.maxMinutes, huntFloor + trainingGain);
     const plannedHuntMinutes = huntCeiling - huntFloor;
-    const isTraining = /treino/i.test(`${snapshot.location || ""} ${snapshot.activity || ""}`);
+    const isTraining = Boolean(snapshot.isTraining) || /treino|casa/i.test(`${snapshot.location || ""} ${snapshot.activity || ""}`);
     const vipActive = config.trainingRate >= 8;
     const floorPercent = Math.round((huntFloor / config.maxMinutes) * 100);
     const ceilingPercent = Math.round((huntCeiling / config.maxMinutes) * 100);
@@ -688,9 +688,9 @@
     if (!plan) return null;
     const location = normalizeLookup(snapshot.location || "");
     const trainingTarget = config.trainingMode === "house" ? "Casa" : "Treino online";
-    const isTraining = location.includes("treino online") || location === "casa" || /treinando/i.test(snapshot.activity || "");
+    const isTraining = Boolean(snapshot.isTraining) || location.includes("treino online") || location === "casa" || /treinando/i.test(snapshot.activity || "");
     const huntKey = normalizeLookup(config.huntName);
-    const isTargetHunt = Boolean(huntKey) && (location.includes(huntKey) || huntKey.includes(location));
+    const isTargetHunt = !isTraining && Boolean(huntKey) && (location.includes(huntKey) || huntKey.includes(location));
 
     if (plan.currentMinutes <= plan.huntFloor && !isTraining) {
       return { type: "train", target: trainingTarget, reason: `Stamina chegou a ${formatMinutes(plan.huntFloor)} (${plan.floorPercent}%).` };
@@ -759,8 +759,8 @@
     if (snapshot.stamina) {
       if (snapshot.stamina.percent <= 20) {
         items.push(recommendation("stamina", "critical", "Stamina muito baixa", `Stamina em ${snapshot.stamina.percent}%. Priorize recuperação e evite uma hunt longa.`));
-      } else if (snapshot.stamina.percent < 50 && /treino/i.test(snapshot.location || snapshot.activity || "")) {
-        items.push(recommendation("training", "positive", "Recuperando stamina", `Stamina em ${snapshot.stamina.percent}%. O treino online está alinhado com a recuperação.`));
+      } else if (snapshot.stamina.percent < 50 && (snapshot.isTraining || /treino|casa/i.test(`${snapshot.location || ""} ${snapshot.activity || ""}`))) {
+        items.push(recommendation("training", "positive", "Recuperando stamina", `Stamina em ${snapshot.stamina.percent}%. O treino está recuperando a stamina.`));
       } else if (snapshot.stamina.percent < 50) {
         items.push(recommendation("stamina", "warning", "Stamina abaixo de 50%", `Stamina em ${snapshot.stamina.percent}%. Considere o Treino Online antes de priorizar XP.`));
       }
@@ -774,7 +774,7 @@
       items.push(recommendation("loop", "info", "Loop desativado", "Ative o loop se quiser repetir a atividade atual continuamente."));
     }
 
-    if (objective === "xp" && snapshot.stamina && snapshot.stamina.percent >= 80 && /treino/i.test(snapshot.location || "")) {
+    if (objective === "xp" && snapshot.stamina && snapshot.stamina.percent >= 80 && (snapshot.isTraining || /treino|casa/i.test(snapshot.location || ""))) {
       items.push(recommendation("xp-ready", "positive", "Pronto para ganhar XP", "A stamina já permite considerar uma hunt de progressão."));
     }
 
@@ -828,6 +828,54 @@
     });
   }
 
+  function bestCodexMission(pouchItems, catalog, progress) {
+    if (!Array.isArray(pouchItems) || !catalog?.missions?.length || !catalog?.items
+      || !progress?.prog || !Array.isArray(progress.done)) return null;
+    const done = new Set(progress.done);
+    const unlocked = new Set(progress.unlocked || []);
+    const requirements = new Map();
+    for (const refs of Object.values(catalog.items)) {
+      for (const [index, requirementIndex, quantity] of refs) {
+        const mission = catalog.missions[index];
+        if (!mission) continue;
+        let req = requirements.get(mission.id);
+        if (!req) { req = new Map(); requirements.set(mission.id, req); }
+        req.set(requirementIndex, Math.max(req.get(requirementIndex) || 0, quantity));
+      }
+    }
+    const candidates = new Map();
+    for (const item of pouchItems) {
+      if (!item?.material || !item.name || !Number.isFinite(item.count) || item.count <= 0) continue;
+      for (const [index, requirementIndex, quantity, requiredTier, minTier] of catalog.items[normalizeLookup(item.name)] || []) {
+        const mission = catalog.missions[index];
+        if (!mission?.id?.startsWith("hunt-") || done.has(mission.id)
+          || (/-[23]$/.test(mission.id) && !unlocked.has(mission.id))
+          || (requiredTier != null && item.tier < requiredTier)
+          || (minTier != null && item.tier < minTier)) continue;
+        const previousId = mission.id.endsWith("-3") ? mission.id.slice(0, -2) + "-2"
+          : mission.id.endsWith("-2") ? mission.id.slice(0, -2) : null;
+        if (previousId && !done.has(previousId)) continue;
+        const missing = Math.max(0, quantity - (Number(progress.prog[mission.id]?.[requirementIndex]) || 0));
+        if (!missing) continue;
+        const contribution = Math.min(item.count, missing);
+        let candidate = candidates.get(mission.id);
+        if (!candidate) {
+          const totalMissing = [...(requirements.get(mission.id)?.entries() || [])]
+            .reduce((sum, [reqIndex, need]) => sum + Math.max(0, need - (Number(progress.prog[mission.id]?.[reqIndex]) || 0)), 0);
+          candidate = { id: mission.id, title: mission.title, totalMissing, covered: new Map() };
+          candidates.set(mission.id, candidate);
+        }
+        candidate.covered.set(requirementIndex, Math.min(missing, (candidate.covered.get(requirementIndex) || 0) + contribution));
+      }
+    }
+    return [...candidates.values()].map((candidate) => {
+      const available = [...candidate.covered.values()].reduce((sum, count) => sum + count, 0);
+      return { id: candidate.id, title: candidate.title, available,
+        missingAfterPouch: Math.max(0, candidate.totalMissing - available) };
+    }).sort((a, b) => a.missingAfterPouch - b.missingAfterPouch
+      || b.available - a.available || a.id.localeCompare(b.id))[0] || null;
+  }
+
   return {
     buildRecommendations,
     bossModeDetected,
@@ -843,6 +891,7 @@
     compactHistory,
     codexCompletion,
     codexItemNeeds,
+    bestCodexMission,
     durationToMinutes,
     dailyHuntXp,
     elapsedToSeconds,

@@ -25,6 +25,8 @@
     maxRepairGold: 100000,
     codexVisible: true,
     codexHuntId: "",
+    codexAutoEnabled: false,
+    codexAutoOwnedTarget: "",
     activeView: "dashboard"
   };
   let settings = { ...defaults };
@@ -68,6 +70,12 @@
   let selectedSetCharacter = null;
   let knownStaminaMaxMinutes = 42 * 60;
   let codexProgress = null;
+  let codexAutoGame = null;
+  let codexAutoBusy = false;
+  let lastCodexAutoAttemptAt = 0;
+  let codexAutoMessage = "Ao ativar, materiais serão consumidos pelo Codex; equipamentos ficam de fora.";
+  let lastGameMode = "";
+  let lastGameModeAt = 0;
   let lastCodexHuntId = "";
   let lastCodexRender = "";
   let codexExpandedTier = -1;
@@ -94,6 +102,7 @@
     </header>
     <section class="bj-codex" id="bj-codex">
       <div class="bj-codex-head"><strong>CODEX DA HUNT</strong><span id="bj-codex-state">Aguardando o jogo</span></div>
+      <div class="bj-codex-auto"><button type="button" data-action="toggle-codex-auto" id="bj-codex-auto-toggle"></button><span id="bj-codex-auto-status"></span></div>
       <label class="bj-codex-choice"><span>Missão</span><select id="bj-codex-select" title="Escolher hunt do Codex"></select></label>
       <div id="bj-codex-missions"></div>
     </section>
@@ -218,6 +227,24 @@
     } catch (_error) { /* O jogo ainda não enviou um estado Codex válido. */ }
   });
   document.dispatchEvent(new Event("baiak-jarvis:codex-request"));
+  document.addEventListener("baiak-jarvis:codex-auto", (event) => {
+    try {
+      const value = JSON.parse(event.detail);
+      if (!Array.isArray(value.targets)) return;
+      codexAutoGame = value;
+      renderCodexAutoStatus();
+      if ((!settings.enabled || !settings.codexAutoEnabled) && settings.codexAutoOwnedTarget) {
+        releaseGameAutoCodex().catch(() => {});
+      }
+    } catch (_error) { /* Estado do Auto Collect ainda indisponível. */ }
+  });
+  document.dispatchEvent(new Event("baiak-jarvis:codex-auto-request"));
+  document.addEventListener("baiak-jarvis:mode", (event) => {
+    if (event.detail !== "exercise" && event.detail !== "hunt" && event.detail !== "boss") return;
+    lastGameMode = event.detail;
+    lastGameModeAt = Date.now();
+  });
+  document.dispatchEvent(new Event("baiak-jarvis:mode-request"));
 
   function detectLoop() {
     const element = document.querySelector("#loop-toggle");
@@ -243,7 +270,7 @@
       const name = core.clean(member.querySelector(".m-name")?.textContent);
       const role = core.clean(member.querySelector(".role")?.textContent).toUpperCase() || null;
       const meta = core.clean(member.querySelector(".m-meta")?.textContent);
-      const match = meta.match(/(Druid|Knight|Sorcerer|Paladin)\s*[·|]\s*lvl\s*(\d+)/i);
+      const match = meta.match(/(Druid|Knight|Sorcerer|Paladin|Monk)\s*[·|]\s*lvl\s*(\d+)/i);
       const hp = core.parseVitalBar(member.querySelector(".bar.hp b")?.textContent || member.querySelector(".bar.hp")?.dataset.tip);
       const mana = core.parseVitalBar(member.querySelector(".bar.mana b")?.textContent || member.querySelector(".bar.mana")?.dataset.tip);
       const levelProgress = core.numberFromPtBr(member.querySelector(".bar.xp b")?.textContent);
@@ -266,6 +293,12 @@
     const gameRoot = document.querySelector("#app") || document.body;
     const location = (document.querySelector("#wave-title")?.textContent || "").replace(/▾/g, "");
     const snapshot = core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
+    const modeIsTraining = Date.now() - lastGameModeAt < 30000 && lastGameMode === "exercise";
+    const trainingOverlay = document.querySelector("#training-overlay:not(.hidden) .trn-row");
+    snapshot.isTraining = modeIsTraining || Boolean(trainingOverlay) || /^(casa|treino online)$/i.test(core.clean(location));
+    if (snapshot.isTraining && !/^(casa|treino online)$/i.test(core.clean(location))) {
+      snapshot.location = currentHouseOwner || settings.trainingMode === "house" ? "Casa" : "Treino online";
+    }
     const mountBonus = [...document.querySelectorAll("#skills-panel-body .sk-stat")].find((row) => {
       const label = core.normalizeLookup(row.querySelector(":scope > span")?.textContent);
       return /montaria|mount/.test(label) && /stamina/.test(label) && /max|cap/.test(label);
@@ -292,6 +325,7 @@
     if (normalized.includes("druid")) return "Druid";
     if (normalized.includes("sorcerer")) return "Sorcerer";
     if (normalized.includes("paladin")) return "Paladin";
+    if (normalized.includes("monk") || normalized.includes("monge")) return "Monk";
     return null;
   }
 
@@ -299,7 +333,7 @@
     // O texto do botão é só a vocação (ED/EK/MS); o nome está no title.
     const name = core.skillMemberName(button?.title, partyName || button?.textContent);
     const vocation = vocationFromPanel(document.querySelector("#skills-panel-body .sk-voc")?.textContent || button?.title);
-    const primarySkill = ({ Knight: "Melee", Druid: "Magic", Sorcerer: "Magic", Paladin: "Distance" })[vocation];
+    const primarySkill = ({ Knight: "Melee", Druid: "Magic", Sorcerer: "Magic", Paladin: "Distance", Monk: "Fist" })[vocation];
     const skillRows = [...document.querySelectorAll("#skills-panel-body .sk-skill:not(#sk-xp-row)")].map((row) => {
       const cells = row.querySelectorAll(".sk-row > span");
       return {
@@ -378,8 +412,8 @@
         const current = profiles[scanned.name] || genericProfile(scanned);
         Object.assign(current, Object.fromEntries(Object.entries(scanned).filter(([, value]) => value != null)));
         const skillText = `${current.skillType || "Skill"} ${current.skillLevel || "—"}${current.skillBonus ? ` +${current.skillBonus}` : ""}`;
-        current.attack = `${current.vocation === "Knight" ? "Físico" : current.vocation === "Paladin" ? "Distância" : "Magia"} · ${skillText}`;
-        current.attackElements = [...new Set([...(current.vocation === "Knight" || current.vocation === "Paladin" ? ["physical"] : []), ...Object.keys(current.damageBonuses || {})])];
+        current.attack = `${current.vocation === "Knight" || current.vocation === "Monk" ? "Físico" : current.vocation === "Paladin" ? "Distância" : "Magia"} · ${skillText}`;
+        current.attackElements = [...new Set([...(current.vocation === "Knight" || current.vocation === "Paladin" || current.vocation === "Monk" ? ["physical"] : []), ...Object.keys(current.damageBonuses || {})])];
         profiles[scanned.name] = current;
       }
       if (original && !original.classList.contains("on")) {
@@ -401,7 +435,8 @@
       Knight: { role: "TANK", attack: `Físico · ${skill}`, attackElements: ["physical"] },
       Druid: { role: "SUP", attack: `Magia · ${skill}`, attackElements: [] },
       Sorcerer: { role: "DPS", attack: `Magia · ${skill}`, attackElements: [] },
-      Paladin: { role: "DPS", attack: `Distância · ${skill}`, attackElements: ["physical"] }
+      Paladin: { role: "DPS", attack: `Distância · ${skill}`, attackElements: ["physical"] },
+      Monk: { role: "DPS", attack: `Físico · ${skill}`, attackElements: ["physical"] }
     };
     const preset = presets[vocation] || { role: vocation, attack: skill, attackElements: [] };
     return {
@@ -423,8 +458,8 @@
         if (character[key] != null) current[key] = character[key];
       }
       if (!profiles[character.name]) Object.assign(current, genericProfile({ ...character, ...current }));
-      if (current.vocation === "Knight") {
-        current.attack = `Físico · ${current.skillType || "Melee"} ${current.skillLevel || "—"}${current.skillBonus ? ` +${current.skillBonus}` : ""}`;
+      if (current.vocation === "Knight" || current.vocation === "Monk") {
+        current.attack = `Físico · ${current.skillType || (current.vocation === "Monk" ? "Fist" : "Melee")} ${current.skillLevel || "—"}${current.skillBonus ? ` +${current.skillBonus}` : ""}`;
         current.attackElements = [...new Set(["physical", ...Object.keys(current.damageBonuses || {})])];
       }
       profiles[character.name] = current;
@@ -494,9 +529,207 @@
     }
   }
 
+  function pouchCodexMaterials() {
+    return [...document.querySelectorAll("#inv-grid > .cell.mat:not(.buffpot):not(.reward-protected)")]
+      .map((cell) => {
+        const item = lootPouchItem(cell);
+        const count = core.numberFromPtBr(cell.title.match(/^([\d.,]+)x\b/)?.[1]);
+        return { ...item, count, material: true };
+      }).filter((item) => item.name && Number.isFinite(item.count) && item.count > 0);
+  }
+
+  function renderCodexAutoStatus() {
+    const button = host.querySelector("#bj-codex-auto-toggle");
+    const status = host.querySelector("#bj-codex-auto-status");
+    if (!button || !status) return;
+    button.textContent = settings.codexAutoEnabled ? "Auto entrega: ligada" : "Auto entrega: desligada";
+    button.setAttribute("aria-pressed", String(settings.codexAutoEnabled));
+    status.textContent = codexAutoMessage;
+  }
+
+  function gameCodexTab(modal, name) {
+    return [...modal.querySelectorAll(".codex-tab")].find((button) =>
+      core.normalizeLookup(button.querySelector(".codex-tab-label")?.textContent) === core.normalizeLookup(name));
+  }
+
+  function codexChainId(id) {
+    return String(id || "").replace(/-[23]$/, "");
+  }
+
+  async function configureGameAutoCodex(best) {
+    if (isVisible(document.querySelector("#codex-modal"))
+      || isVisible(document.querySelector("#confirm-modal"))
+      || isVisible(document.querySelector("#boss-modal"))
+      || isVisible(document.querySelector("#house-modal"))) return false;
+    const opener = document.querySelector("#tab-codex");
+    if (!isVisible(opener)) throw new Error("A aba Codex do jogo não está disponível.");
+    opener.click();
+    const modal = await waitForElement("#codex-modal", 5000);
+    if (!modal) throw new Error("O Codex do jogo não abriu.");
+    try {
+      const autoTab = gameCodexTab(modal, "Auto Collect");
+      if (!autoTab) throw new Error("Auto Collect não está disponível nesta conta.");
+      autoTab.click();
+      const gear = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
+        core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent) === "incluir equipamentos")?.querySelector("input");
+      if (!gear) throw new Error("Não consegui verificar a proteção dos equipamentos.");
+      if (gear.checked) gear.click();
+      const pay = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
+        core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent).includes("auto desbloquear"))?.querySelector("input");
+      if (pay?.checked) pay.click();
+
+      if (settings.codexAutoOwnedTarget && settings.codexAutoOwnedTarget !== best.id
+        && codexAutoGame.targets.includes(settings.codexAutoOwnedTarget)) {
+        const missions = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+          core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes");
+        if (!missions) throw new Error("A lista de missões do Auto Collect não apareceu.");
+        missions.click();
+        const oldTitle = codexItemCatalog.missions.find((mission) => mission.id === settings.codexAutoOwnedTarget)?.title;
+        const oldSlot = [...modal.querySelectorAll(".cx-auto-slot")].find((slot) =>
+          core.normalizeLookup(slot.querySelector(".cx-auto-slot-name")?.textContent) === core.normalizeLookup(oldTitle))
+          || (codexAutoGame.targets.length === 1 ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
+        const remove = oldSlot?.querySelector(".cx-auto-slot-rm");
+        if (!remove) throw new Error("Não consegui retirar a missão anterior do Auto Collect.");
+        remove.click();
+        codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== settings.codexAutoOwnedTarget);
+        settings.codexAutoOwnedTarget = "";
+      }
+
+      if (!codexAutoGame.targets.includes(best.id)) {
+        const all = gameCodexTab(modal, "Todas");
+        if (!all) throw new Error("A lista de missões do Codex não apareceu.");
+        all.click();
+        const search = modal.querySelector(".cx-search");
+        if (!search) throw new Error("A busca do Codex não apareceu.");
+        setSearchValue(search, best.title);
+        let row = null;
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          row = [...modal.querySelectorAll("#codex-list .cx-entry")].find((entry) =>
+            entry.querySelector(".cx-entry-num")?.title === best.id
+            || core.normalizeLookup(entry.querySelector(".cx-entry-name")?.textContent) === core.normalizeLookup(best.title));
+          if (row) break;
+          await delay(100);
+        }
+        const add = row?.querySelector(".cx-ac:not(.cx-farm)");
+        if (!add || add.disabled) throw new Error(`A missão ${best.title} não pode entrar no Auto Collect agora.`);
+        add.click();
+        codexAutoGame.targets.push(best.id);
+        settings.codexAutoOwnedTarget = best.id;
+        await ext.storage.local.set({ bjSettings: settings });
+      }
+
+      autoTab.click();
+      const enabled = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
+        core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent) === "entrega automatica")?.querySelector("input");
+      if (!enabled) throw new Error("O controle da entrega automática não apareceu.");
+      if (!enabled.checked) {
+        enabled.click();
+        const confirm = await waitForElement("#confirm-modal #confirm-yes", 3000);
+        if (!confirm || !core.normalizeLookup(document.querySelector("#confirm-modal")?.textContent).includes("ligar o auto codex")) {
+          throw new Error("A confirmação do Auto Codex não apareceu.");
+        }
+        confirm.click();
+      }
+      codexAutoGame.enabled = true;
+      codexAutoGame.gear = false;
+      codexAutoGame.pay = false;
+      return true;
+    } finally {
+      if (isVisible(modal) && !isVisible(document.querySelector("#confirm-modal"))) modal.querySelector("#codex-modal-close")?.click();
+    }
+  }
+
+  async function maybeAutoCodex() {
+    if (!settings.enabled || !settings.codexAutoEnabled || codexAutoBusy || automationBusy || refreshBusy
+      || bossRun.running || bossRun.inFight || !codexProgress || !codexAutoGame
+      || Date.now() - lastCodexAutoAttemptAt < 60000) return;
+    const best = core.bestCodexMission(pouchCodexMaterials(), codexItemCatalog, codexProgress);
+    if (!best) {
+      codexAutoMessage = "Aguardando materiais de missões liberadas na Loot Pouch.";
+      renderCodexAutoStatus();
+      return;
+    }
+    if (codexAutoGame.targets.some((id) => id !== settings.codexAutoOwnedTarget)) {
+      codexAutoMessage = "Auto Collect do jogo já tem missão escolhida; mantive sua seleção.";
+      renderCodexAutoStatus();
+      return;
+    }
+    if (codexAutoGame.enabled && !codexAutoGame.gear && !codexAutoGame.pay
+      && (codexAutoGame.targets.includes(best.id)
+        || (codexAutoGame.targets.includes(settings.codexAutoOwnedTarget)
+          && codexChainId(best.id) === codexChainId(settings.codexAutoOwnedTarget)))) {
+      codexAutoMessage = `${best.title} · ${best.available} item(ns) disponíveis · equipamentos excluídos.`;
+      renderCodexAutoStatus();
+      return;
+    }
+    codexAutoBusy = true;
+    lastCodexAutoAttemptAt = Date.now();
+    try {
+      codexAutoMessage = `Configurando ${best.title} no Auto Collect…`;
+      renderCodexAutoStatus();
+      const changed = await configureGameAutoCodex(best);
+      if (changed) codexAutoMessage = `${best.title} selecionada · entrega automática sem equipamentos.`;
+    } catch (error) {
+      codexAutoMessage = error.message;
+    } finally {
+      codexAutoBusy = false;
+      renderCodexAutoStatus();
+    }
+  }
+
+  async function releaseGameAutoCodex() {
+    if (!settings.codexAutoOwnedTarget || !codexAutoGame || codexAutoBusy) return;
+    if (isVisible(document.querySelector("#codex-modal")) || isVisible(document.querySelector("#confirm-modal"))
+      || bossRun.running || bossRun.inFight) return;
+    codexAutoBusy = true;
+    try {
+      const opener = document.querySelector("#tab-codex");
+      if (!isVisible(opener)) throw new Error("Abra o jogo para desligar a entrega do Codex.");
+      opener.click();
+      const modal = await waitForElement("#codex-modal", 5000);
+      if (!modal) throw new Error("O Codex do jogo não abriu.");
+      try {
+        gameCodexTab(modal, "Auto Collect")?.click();
+        const missions = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+          core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes");
+        missions?.click();
+        const title = codexItemCatalog.missions.find((mission) => mission.id === settings.codexAutoOwnedTarget)?.title;
+        const slot = [...modal.querySelectorAll(".cx-auto-slot")].find((item) =>
+          core.normalizeLookup(item.querySelector(".cx-auto-slot-name")?.textContent) === core.normalizeLookup(title))
+          || (codexAutoGame.targets.length === 1 ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
+        const remove = slot?.querySelector(".cx-auto-slot-rm");
+        if (codexAutoGame.targets.includes(settings.codexAutoOwnedTarget) && !remove) {
+          throw new Error("Não consegui retirar a missão automática do jogo.");
+        }
+        remove?.click();
+        codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== settings.codexAutoOwnedTarget);
+        if (!codexAutoGame.targets.length) {
+          const general = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+            core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "geral");
+          general?.click();
+          const enabled = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
+            core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent) === "entrega automatica")?.querySelector("input");
+          if (enabled?.checked) enabled.click();
+          codexAutoGame.enabled = false;
+        }
+        settings.codexAutoOwnedTarget = "";
+        await ext.storage.local.set({ bjSettings: settings });
+        codexAutoMessage = "Entrega automática desligada.";
+      } finally {
+        if (isVisible(modal)) modal.querySelector("#codex-modal-close")?.click();
+      }
+    } catch (error) {
+      codexAutoMessage = error.message;
+    } finally {
+      codexAutoBusy = false;
+      renderCodexAutoStatus();
+    }
+  }
+
   function renderCodex() {
     const panel = host.querySelector("#bj-codex");
     if (!panel) return;
+    renderCodexAutoStatus();
     panel.hidden = !settings.codexVisible;
     host.classList.toggle("bj-codex-visible", settings.codexVisible);
     const toggle = host.querySelector('[data-action="toggle-codex"]');
@@ -902,11 +1135,21 @@
     let cards = [];
     let charges = null;
     let decision = { type: "stop", reason: "no-favorites" };
-    for (let attempt = 0; attempt < 24 && bossRun.running; attempt += 1) {
+    const maxAttempts = bossRun.attempted.length ? 120 : 24;
+    for (let attempt = 0; attempt < maxAttempts && bossRun.running; attempt += 1) {
       cards = readFavoriteBossCards(modal);
       charges = readBossCharges(modal);
       decision = core.bossRunDecision(cards, bossRun.attempted, charges?.left);
       if (decision.type === "fight" || decision.reason === "ambiguous-boss" || decision.reason === "no-charges") break;
+      // O jogo pode remontar a grade após uma vitória. Reabra um favorito
+      // elegível para forçar a atualização do botão Enfrentar.
+      const next = cards.find((card) => card.favorite && !card.active && !card.cooldown
+        && !bossRun.attempted.some((name) => core.normalizeLookup(name) === core.normalizeLookup(card.name)));
+      if (next) {
+        const cell = findBossCell(modal, next.name);
+        if (cell && !cell.classList.contains("expanded")) cell.click();
+      }
+      if (attempt > 0 && attempt % 20 === 0) setBossRunState("running", "Aguardando a lista de favoritos atualizar…");
       await delay(250);
     }
     return { cards, charges, decision };
@@ -2260,6 +2503,8 @@
       scanHouseInvites().catch((error) => { houseScanMessage = error.message; renderTraining(); });
     }
     maybeRepairHouseDummy(latestSnapshot);
+    if (settings.codexAutoEnabled) maybeAutoCodex().catch(() => {});
+    else if (settings.codexAutoOwnedTarget) releaseGameAutoCodex().catch(() => {});
     if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
@@ -2300,6 +2545,7 @@
     switchView(settings.activeView || "dashboard", false).catch(() => {});
     if (!settings.enabled) {
       if (bossRun.running) toggleBossRun();
+      if (settings.codexAutoOwnedTarget) releaseGameAutoCodex().catch(() => {});
       return;
     }
     tick();
@@ -2319,6 +2565,15 @@
       settings.codexVisible = !settings.codexVisible;
       renderCodex();
       await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
+    if (action === "toggle-codex-auto") {
+      settings.codexAutoEnabled = !settings.codexAutoEnabled;
+      codexAutoMessage = settings.codexAutoEnabled ? "Buscando a melhor missão liberada…" : "Desligando a entrega no jogo…";
+      renderCodexAutoStatus();
+      await ext.storage.local.set({ bjSettings: settings });
+      if (settings.codexAutoEnabled) maybeAutoCodex().catch(() => {});
+      else releaseGameAutoCodex().catch(() => {});
       return;
     }
     if (action === "codex-tier") {
