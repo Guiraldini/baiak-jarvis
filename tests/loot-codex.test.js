@@ -69,4 +69,11 @@ assert.equal(core.bestCodexMission([{ name: "flower", count: 2, tier: 0, materia
 assert.equal(core.bestCodexMission([{ name: "flower", count: 2, tier: 0, material: true }],
   allCodexCatalog, { done: ["boss-gravedigger-1"], unlocked: [], prog: {} })?.id, "hunt-other");
 
+const pouch = [{ name: "demonic essence", count: 14, tier: 0, material: true }];
+assert.equal(core.codexDeliveryIsMaterialOnly([{ name: "demonic essence", count: 14, valuable: false }], pouch), true);
+assert.equal(core.codexDeliveryIsMaterialOnly([{ name: "demonic essence", count: 15, valuable: false }], pouch), false);
+assert.equal(core.codexDeliveryIsMaterialOnly([{ name: "demonic essence", count: 14, valuable: false },
+  { name: "sword", count: 1, valuable: false }], pouch), false);
+assert.equal(core.codexDeliveryIsMaterialOnly([{ name: "demonic essence", count: 14, valuable: true }], pouch), false);
+
 console.log("loot-codex.test.js: todos os testes passaram");

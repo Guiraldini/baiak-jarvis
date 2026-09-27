@@ -876,6 +876,23 @@
       || b.available - a.available || a.id.localeCompare(b.id))[0] || null;
   }
 
+  function codexDeliveryIsMaterialOnly(lines, pouchItems) {
+    if (!Array.isArray(lines) || !lines.length) return false;
+    const available = new Map();
+    for (const item of pouchItems || []) {
+      if (!item?.material || item.tier !== 0 || !Number.isFinite(item.count) || item.count <= 0) continue;
+      const name = normalizeLookup(item.name);
+      available.set(name, (available.get(name) || 0) + item.count);
+    }
+    for (const line of lines) {
+      const name = normalizeLookup(line.name);
+      if (!name || line.valuable || !Number.isFinite(line.count) || line.count <= 0
+        || (available.get(name) || 0) < line.count) return false;
+      available.set(name, available.get(name) - line.count);
+    }
+    return true;
+  }
+
   return {
     buildRecommendations,
     bossModeDetected,
@@ -892,6 +909,7 @@
     codexCompletion,
     codexItemNeeds,
     bestCodexMission,
+    codexDeliveryIsMaterialOnly,
     durationToMinutes,
     dailyHuntXp,
     elapsedToSeconds,

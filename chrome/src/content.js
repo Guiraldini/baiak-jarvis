@@ -571,7 +571,7 @@
       || (onlyTarget ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
   }
 
-  async function addGameAutoMission(modal, id) {
+  async function findGameCodexMissionRow(modal, id) {
     const mission = codexItemCatalog.missions.find((entry) => entry.id === id);
     if (!mission) throw new Error("Não encontrei a missão anterior no catálogo do Codex.");
     const all = gameCodexTab(modal, "Todas");
@@ -588,9 +588,41 @@
       if (row) break;
       await delay(100);
     }
+    return row;
+  }
+
+  async function addGameAutoMission(modal, id) {
+    const row = await findGameCodexMissionRow(modal, id);
     const add = row?.querySelector(".cx-ac:not(.cx-farm)");
-    if (!add || add.disabled) throw new Error(`A missão ${mission.title} não pode entrar no Auto Collect agora.`);
+    if (!add || add.disabled) throw new Error("A missão escolhida não pode entrar no Auto Collect agora.");
     add.click();
+  }
+
+  async function deliverExistingPouchMaterials(modal, id) {
+    try {
+      const row = await findGameCodexMissionRow(modal, id);
+      const give = row?.querySelector(".cx-give");
+      if (!give || give.disabled || core.normalizeLookup(give.textContent) !== "entregar") return false;
+      give.click();
+      const confirm = await waitForElement("#confirm-modal", 6000);
+      if (!confirm) return false;
+      const lines = [...confirm.querySelectorAll(".cx-confirm-row")].map((line) => ({
+        name: line.querySelector(".cx-confirm-name")?.textContent || "",
+        count: core.numberFromPtBr(line.querySelector(".cx-confirm-qty")?.textContent),
+        valuable: line.classList.contains("valiosa")
+      }));
+      const yes = confirm.querySelector("#confirm-yes");
+      if (!core.codexDeliveryIsMaterialOnly(lines, pouchCodexMaterials()) || !yes || yes.disabled) {
+        confirm.querySelector("#confirm-no")?.click();
+        codexAutoMessage = "Entrega manual cancelada: a lista do jogo contém equipamento, outro item ou exige confirmação adicional.";
+        return false;
+      }
+      yes.click();
+      return true;
+    } catch (_error) {
+      document.querySelector("#confirm-modal #confirm-no")?.click();
+      return false;
+    }
   }
 
   async function configureGameAutoCodex(best) {
@@ -673,6 +705,9 @@
       codexAutoGame.enabled = true;
       codexAutoGame.gear = false;
       codexAutoGame.pay = false;
+      codexAutoMessage = `${best.title} selecionada · entrega automática sem equipamentos.`;
+      const delivered = await deliverExistingPouchMaterials(modal, best.id);
+      if (delivered) codexAutoMessage = `${best.title} · entrega dos materiais existentes solicitada; equipamentos excluídos.`;
       return true;
     } catch (error) {
       if (displacedTarget) {
@@ -726,15 +761,13 @@
       && codexAutoGame.targets.some((id) => codexChainId(id) === codexChainId(best.id))) {
       codexAutoMessage = `${best.title} · ${best.available} item(ns) disponíveis · equipamentos excluídos.`;
       renderCodexAutoStatus();
-      return;
     }
     codexAutoBusy = true;
     lastCodexAutoAttemptAt = Date.now();
     try {
       codexAutoMessage = `Configurando ${best.title} no Auto Collect…`;
       renderCodexAutoStatus();
-      const changed = await configureGameAutoCodex(best);
-      if (changed) codexAutoMessage = `${best.title} selecionada · entrega automática sem equipamentos.`;
+      await configureGameAutoCodex(best);
     } catch (error) {
       codexAutoMessage = error.message;
     } finally {
