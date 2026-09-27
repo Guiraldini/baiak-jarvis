@@ -848,12 +848,12 @@
       if (!item?.material || !item.name || !Number.isFinite(item.count) || item.count <= 0) continue;
       for (const [index, requirementIndex, quantity, requiredTier, minTier] of catalog.items[normalizeLookup(item.name)] || []) {
         const mission = catalog.missions[index];
-        if (!mission?.id?.startsWith("hunt-") || done.has(mission.id)
+        if (!/^(hunt|boss)-/.test(mission?.id || "") || done.has(mission.id)
           || (/-[23]$/.test(mission.id) && !unlocked.has(mission.id))
           || (requiredTier != null && item.tier < requiredTier)
           || (minTier != null && item.tier < minTier)) continue;
         const previousId = mission.id.endsWith("-3") ? mission.id.slice(0, -2) + "-2"
-          : mission.id.endsWith("-2") ? mission.id.slice(0, -2) : null;
+          : mission.id.endsWith("-2") ? mission.id.slice(0, -2) + (mission.id.startsWith("boss-") ? "-1" : "") : null;
         if (previousId && !done.has(previousId)) continue;
         const missing = Math.max(0, quantity - (Number(progress.prog[mission.id]?.[requirementIndex]) || 0));
         if (!missing) continue;

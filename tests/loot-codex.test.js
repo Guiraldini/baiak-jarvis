@@ -51,4 +51,22 @@ assert.deepEqual(core.bestCodexMission([{ name: "flower", count: 1, tier: 0, mat
   { done: ["hunt-near", "hunt-far", "hunt-locked"], unlocked: ["hunt-locked-2"], prog: {} })?.id,
 "hunt-locked-2");
 
+const allCodexCatalog = {
+  missions: [
+    { id: "hunt-other", title: "Hunt fora da fase atual" },
+    { id: "boss-gravedigger-1", title: "Chefe I" },
+    { id: "boss-gravedigger-2", title: "Chefe II" },
+    { id: "set-sword", title: "Equipamento" }
+  ],
+  items: { flower: [[0, 0, 10, null, null, false], [1, 0, 2, null, null, false],
+    [2, 0, 4, null, null, false], [3, 0, 1, null, null, false]] }
+};
+assert.equal(core.bestCodexMission([{ name: "flower", count: 2, tier: 0, material: true }],
+  allCodexCatalog, { done: [], unlocked: [], prog: {} })?.id, "boss-gravedigger-1");
+assert.equal(core.bestCodexMission([{ name: "flower", count: 2, tier: 0, material: true }],
+  allCodexCatalog, { done: ["boss-gravedigger-1"], unlocked: ["boss-gravedigger-2"], prog: {} })?.id,
+"boss-gravedigger-2");
+assert.equal(core.bestCodexMission([{ name: "flower", count: 2, tier: 0, material: true }],
+  allCodexCatalog, { done: ["boss-gravedigger-1"], unlocked: [], prog: {} })?.id, "hunt-other");
+
 console.log("loot-codex.test.js: todos os testes passaram");

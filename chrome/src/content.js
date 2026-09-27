@@ -27,6 +27,8 @@
     codexHuntId: "",
     codexAutoEnabled: false,
     codexAutoOwnedTarget: "",
+    codexAutoPreviousTarget: "",
+    codexAutoPreviousEnabled: false,
     activeView: "dashboard"
   };
   let settings = { ...defaults };
@@ -73,7 +75,7 @@
   let codexAutoGame = null;
   let codexAutoBusy = false;
   let lastCodexAutoAttemptAt = 0;
-  let codexAutoMessage = "Ao ativar, materiais serão consumidos pelo Codex; equipamentos ficam de fora.";
+  let codexAutoMessage = "Lê toda a Loot Pouch e entrega em códex liberados, sem precisar favoritar; equipamentos ficam de fora.";
   let lastGameMode = "";
   let lastGameModeAt = 0;
   let lastCodexHuntId = "";
@@ -233,7 +235,8 @@
       if (!Array.isArray(value.targets)) return;
       codexAutoGame = value;
       renderCodexAutoStatus();
-      if ((!settings.enabled || !settings.codexAutoEnabled) && settings.codexAutoOwnedTarget) {
+      if ((!settings.enabled || !settings.codexAutoEnabled)
+        && (settings.codexAutoOwnedTarget || settings.codexAutoPreviousTarget)) {
         releaseGameAutoCodex().catch(() => {});
       }
     } catch (_error) { /* Estado do Auto Collect ainda indisponível. */ }
@@ -553,7 +556,41 @@
   }
 
   function codexChainId(id) {
-    return String(id || "").replace(/-[23]$/, "");
+    return String(id || "").replace(/-[123]$/, "");
+  }
+
+  function gameAutoMissionSlot(modal, id, onlyTarget = false) {
+    const title = codexItemCatalog.missions.find((mission) => mission.id === id)?.title;
+    const index = codexAutoGame?.targets.indexOf(id) ?? -1;
+    if (index >= 0) {
+      const indexed = [...modal.querySelectorAll(".cx-auto-slot")][index];
+      if (indexed && !indexed.classList.contains("empty")) return indexed;
+    }
+    return [...modal.querySelectorAll(".cx-auto-slot:not(.empty)")].find((slot) =>
+      core.normalizeLookup(slot.querySelector(".cx-auto-slot-name")?.textContent) === core.normalizeLookup(title))
+      || (onlyTarget ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
+  }
+
+  async function addGameAutoMission(modal, id) {
+    const mission = codexItemCatalog.missions.find((entry) => entry.id === id);
+    if (!mission) throw new Error("Não encontrei a missão anterior no catálogo do Codex.");
+    const all = gameCodexTab(modal, "Todas");
+    if (!all) throw new Error("A lista de missões do Codex não apareceu.");
+    all.click();
+    const search = modal.querySelector(".cx-search");
+    if (!search) throw new Error("A busca do Codex não apareceu.");
+    setSearchValue(search, mission.title);
+    let row = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      row = [...modal.querySelectorAll("#codex-list .cx-entry")].find((entry) =>
+        entry.querySelector(".cx-entry-num")?.title === mission.id
+        || core.normalizeLookup(entry.querySelector(".cx-entry-name")?.textContent) === core.normalizeLookup(mission.title));
+      if (row) break;
+      await delay(100);
+    }
+    const add = row?.querySelector(".cx-ac:not(.cx-farm)");
+    if (!add || add.disabled) throw new Error(`A missão ${mission.title} não pode entrar no Auto Collect agora.`);
+    add.click();
   }
 
   async function configureGameAutoCodex(best) {
@@ -566,6 +603,8 @@
     opener.click();
     const modal = await waitForElement("#codex-modal", 5000);
     if (!modal) throw new Error("O Codex do jogo não abriu.");
+    let displacedTarget = "";
+    let displacedManualTarget = false;
     try {
       const autoTab = gameCodexTab(modal, "Auto Collect");
       if (!autoTab) throw new Error("Auto Collect não está disponível nesta conta.");
@@ -578,47 +617,45 @@
         core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent).includes("auto desbloquear"))?.querySelector("input");
       if (pay?.checked) pay.click();
 
-      if (settings.codexAutoOwnedTarget && settings.codexAutoOwnedTarget !== best.id
-        && codexAutoGame.targets.includes(settings.codexAutoOwnedTarget)) {
+      const owned = settings.codexAutoOwnedTarget;
+      if (!owned && !settings.codexAutoPreviousTarget) {
+        settings.codexAutoPreviousEnabled = codexAutoGame.enabled;
+        await ext.storage.local.set({ bjSettings: settings });
+      }
+      const slotCount = Number([...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+        core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes")
+        ?.querySelector(".cx-auto-tab-n")?.textContent.match(/\d+\s*\/\s*(\d+)/)?.[1]);
+      const replacing = owned && codexAutoGame.targets.includes(owned) && codexChainId(owned) !== codexChainId(best.id)
+        ? owned : !owned && codexAutoGame.targets.length && (!slotCount || codexAutoGame.targets.length >= slotCount)
+          ? codexAutoGame.targets[0] : "";
+      if (replacing) {
         const missions = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
           core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes");
         if (!missions) throw new Error("A lista de missões do Auto Collect não apareceu.");
         missions.click();
-        const oldTitle = codexItemCatalog.missions.find((mission) => mission.id === settings.codexAutoOwnedTarget)?.title;
-        const oldSlot = [...modal.querySelectorAll(".cx-auto-slot")].find((slot) =>
-          core.normalizeLookup(slot.querySelector(".cx-auto-slot-name")?.textContent) === core.normalizeLookup(oldTitle))
-          || (codexAutoGame.targets.length === 1 ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
+        const oldSlot = gameAutoMissionSlot(modal, replacing, codexAutoGame.targets.length === 1);
         const remove = oldSlot?.querySelector(".cx-auto-slot-rm");
         if (!remove) throw new Error("Não consegui retirar a missão anterior do Auto Collect.");
+        if (!owned) {
+          settings.codexAutoPreviousTarget = replacing;
+          settings.codexAutoPreviousEnabled = codexAutoGame.enabled;
+          await ext.storage.local.set({ bjSettings: settings });
+        }
         remove.click();
-        codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== settings.codexAutoOwnedTarget);
+        displacedTarget = replacing;
+        displacedManualTarget = !owned;
+        codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== replacing);
         settings.codexAutoOwnedTarget = "";
       }
 
-      if (!codexAutoGame.targets.includes(best.id)) {
-        const all = gameCodexTab(modal, "Todas");
-        if (!all) throw new Error("A lista de missões do Codex não apareceu.");
-        all.click();
-        const search = modal.querySelector(".cx-search");
-        if (!search) throw new Error("A busca do Codex não apareceu.");
-        setSearchValue(search, best.title);
-        let row = null;
-        for (let attempt = 0; attempt < 30; attempt += 1) {
-          row = [...modal.querySelectorAll("#codex-list .cx-entry")].find((entry) =>
-            entry.querySelector(".cx-entry-num")?.title === best.id
-            || core.normalizeLookup(entry.querySelector(".cx-entry-name")?.textContent) === core.normalizeLookup(best.title));
-          if (row) break;
-          await delay(100);
-        }
-        const add = row?.querySelector(".cx-ac:not(.cx-farm)");
-        if (!add || add.disabled) throw new Error(`A missão ${best.title} não pode entrar no Auto Collect agora.`);
-        add.click();
+      if (!codexAutoGame.targets.some((id) => codexChainId(id) === codexChainId(best.id))) {
+        await addGameAutoMission(modal, best.id);
         codexAutoGame.targets.push(best.id);
         settings.codexAutoOwnedTarget = best.id;
         await ext.storage.local.set({ bjSettings: settings });
       }
 
-      autoTab.click();
+      gameCodexTab(modal, "Auto Collect")?.click();
       const enabled = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
         core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent) === "entrega automatica")?.querySelector("input");
       if (!enabled) throw new Error("O controle da entrega automática não apareceu.");
@@ -634,6 +671,31 @@
       codexAutoGame.gear = false;
       codexAutoGame.pay = false;
       return true;
+    } catch (error) {
+      if (displacedTarget) {
+        try {
+          if (settings.codexAutoOwnedTarget === best.id && codexAutoGame.targets.includes(best.id)) {
+            gameCodexTab(modal, "Auto Collect")?.click();
+            [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+              core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes")?.click();
+            const remove = gameAutoMissionSlot(modal, best.id, codexAutoGame.targets.length === 1)?.querySelector(".cx-auto-slot-rm");
+            if (!remove) throw new Error("Não consegui remover a nova missão após uma falha.");
+            remove.click();
+            codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== best.id);
+            settings.codexAutoOwnedTarget = "";
+          }
+          await addGameAutoMission(modal, displacedTarget);
+          codexAutoGame.targets.push(displacedTarget);
+          if (displacedManualTarget) {
+            settings.codexAutoPreviousTarget = "";
+            settings.codexAutoPreviousEnabled = false;
+          } else settings.codexAutoOwnedTarget = displacedTarget;
+          await ext.storage.local.set({ bjSettings: settings });
+        } catch (_restoreError) {
+          throw new Error(`${error.message} A seleção anterior também não pôde ser restaurada; confira o Auto Collect no jogo.`);
+        }
+      }
+      throw error;
     } finally {
       if (isVisible(modal) && !isVisible(document.querySelector("#confirm-modal"))) modal.querySelector("#codex-modal-close")?.click();
     }
@@ -645,19 +707,20 @@
       || Date.now() - lastCodexAutoAttemptAt < 60000) return;
     const best = core.bestCodexMission(pouchCodexMaterials(), codexItemCatalog, codexProgress);
     if (!best) {
-      codexAutoMessage = "Aguardando materiais de missões liberadas na Loot Pouch.";
+      if ((settings.codexAutoOwnedTarget || settings.codexAutoPreviousTarget)
+        && !await releaseGameAutoCodex()) return;
+      codexAutoMessage = "Nenhum material da Loot Pouch corresponde a um códex liberado pendente.";
       renderCodexAutoStatus();
       return;
     }
-    if (codexAutoGame.targets.some((id) => id !== settings.codexAutoOwnedTarget)) {
-      codexAutoMessage = "Auto Collect do jogo já tem missão escolhida; mantive sua seleção.";
+    if (settings.codexAutoOwnedTarget && !codexAutoGame.targets.includes(settings.codexAutoOwnedTarget)) {
+      settings.codexAutoOwnedTarget = "";
+      codexAutoMessage = "A seleção do Auto Collect mudou no jogo; aguardando sua próxima atualização.";
       renderCodexAutoStatus();
       return;
     }
     if (codexAutoGame.enabled && !codexAutoGame.gear && !codexAutoGame.pay
-      && (codexAutoGame.targets.includes(best.id)
-        || (codexAutoGame.targets.includes(settings.codexAutoOwnedTarget)
-          && codexChainId(best.id) === codexChainId(settings.codexAutoOwnedTarget)))) {
+      && codexAutoGame.targets.some((id) => codexChainId(id) === codexChainId(best.id))) {
       codexAutoMessage = `${best.title} · ${best.available} item(ns) disponíveis · equipamentos excluídos.`;
       renderCodexAutoStatus();
       return;
@@ -678,7 +741,7 @@
   }
 
   async function releaseGameAutoCodex() {
-    if (!settings.codexAutoOwnedTarget || !codexAutoGame || codexAutoBusy) return;
+    if ((!settings.codexAutoOwnedTarget && !settings.codexAutoPreviousTarget) || !codexAutoGame || codexAutoBusy) return;
     if (isVisible(document.querySelector("#codex-modal")) || isVisible(document.querySelector("#confirm-modal"))
       || bossRun.running || bossRun.inFight) return;
     codexAutoBusy = true;
@@ -693,33 +756,41 @@
         const missions = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
           core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "missoes");
         missions?.click();
-        const title = codexItemCatalog.missions.find((mission) => mission.id === settings.codexAutoOwnedTarget)?.title;
-        const slot = [...modal.querySelectorAll(".cx-auto-slot")].find((item) =>
-          core.normalizeLookup(item.querySelector(".cx-auto-slot-name")?.textContent) === core.normalizeLookup(title))
-          || (codexAutoGame.targets.length === 1 ? modal.querySelector(".cx-auto-slot:not(.empty)") : null);
+        const slot = settings.codexAutoOwnedTarget
+          ? gameAutoMissionSlot(modal, settings.codexAutoOwnedTarget, codexAutoGame.targets.length === 1) : null;
         const remove = slot?.querySelector(".cx-auto-slot-rm");
         if (codexAutoGame.targets.includes(settings.codexAutoOwnedTarget) && !remove) {
           throw new Error("Não consegui retirar a missão automática do jogo.");
         }
         remove?.click();
         codexAutoGame.targets = codexAutoGame.targets.filter((id) => id !== settings.codexAutoOwnedTarget);
-        if (!codexAutoGame.targets.length) {
-          const general = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
-            core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "geral");
-          general?.click();
+        if (settings.codexAutoPreviousTarget
+          && !codexAutoGame.targets.includes(settings.codexAutoPreviousTarget)) {
+          await addGameAutoMission(modal, settings.codexAutoPreviousTarget);
+          codexAutoGame.targets.push(settings.codexAutoPreviousTarget);
+        }
+        gameCodexTab(modal, "Auto Collect")?.click();
+        const general = [...modal.querySelectorAll(".cx-auto-tab")].find((button) =>
+          core.normalizeLookup(button.querySelector(".cx-auto-tab-l")?.textContent) === "geral");
+        general?.click();
+        if (!settings.codexAutoPreviousEnabled) {
           const enabled = [...modal.querySelectorAll(".cx-auto-opt")].find((row) =>
             core.normalizeLookup(row.querySelector(".cx-auto-opt-name")?.textContent) === "entrega automatica")?.querySelector("input");
           if (enabled?.checked) enabled.click();
           codexAutoGame.enabled = false;
         }
         settings.codexAutoOwnedTarget = "";
+        settings.codexAutoPreviousTarget = "";
+        settings.codexAutoPreviousEnabled = false;
         await ext.storage.local.set({ bjSettings: settings });
         codexAutoMessage = "Entrega automática desligada.";
+        return true;
       } finally {
         if (isVisible(modal)) modal.querySelector("#codex-modal-close")?.click();
       }
     } catch (error) {
       codexAutoMessage = error.message;
+      return false;
     } finally {
       codexAutoBusy = false;
       renderCodexAutoStatus();
@@ -2504,7 +2575,7 @@
     }
     maybeRepairHouseDummy(latestSnapshot);
     if (settings.codexAutoEnabled) maybeAutoCodex().catch(() => {});
-    else if (settings.codexAutoOwnedTarget) releaseGameAutoCodex().catch(() => {});
+    else if (settings.codexAutoOwnedTarget || settings.codexAutoPreviousTarget) releaseGameAutoCodex().catch(() => {});
     if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
