@@ -348,6 +348,11 @@ assert.deepEqual(core.bossRunDecision(bossCards, ["Prince Drazzak", "Lady Tenebr
 assert.deepEqual(core.bossRunDecision(bossCards, [], 0), { type: "stop", reason: "no-charges" });
 assert.deepEqual(core.bossRunDecision(bossCards, [], NaN), { type: "stop", reason: "charges-unknown" });
 assert.deepEqual(core.bossRunDecision([{ name: "Outro", favorite: false, ready: true }], [], 3), { type: "stop", reason: "no-favorites" });
+const bossToday = core.addDailyBossResult(null, { id: "1", name: "Lady Tenebris" }, "2026-09-27");
+const bossTwice = core.addDailyBossResult(bossToday, { id: "2", name: "Lady Tenebris" }, "2026-09-27");
+assert.equal(bossTwice.results.length, 2);
+assert.equal(core.addDailyBossResult(bossTwice, { id: "2", name: "Lady Tenebris" }, "2026-09-27").results.length, 2);
+assert.deepEqual(core.addDailyBossResult(bossTwice, null, "2026-09-28"), { day: "2026-09-28", results: [] });
 assert.deepEqual(core.bossRunDecision([
   { name: "Ahau", favorite: true, ready: true },
   { name: "Áhau", favorite: true, ready: true }

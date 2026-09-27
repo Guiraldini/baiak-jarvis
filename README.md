@@ -2,6 +2,13 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.29
+
+- aguarda o botão **Enfrentar** do próximo chefe estabilizar e tenta novamente se o jogo não registrar o clique, sem avançar para outro chefe até confirmar a entrada;
+- mantém as lutas e a XP dos chefes no painel durante todo o dia, mesmo ao iniciar outra run ou repetir um chefe; zera à meia-noite de Brasília;
+- remove a opção de Auto entrega do Codex, pois a entrega dos itens existentes na Loot Pouch não se mostrou confiável;
+- adiciona um botão no painel **C** para ligar ou desligar o contorno vermelho dos itens da Loot Pouch.
+
 ## Versão 0.8.28
 
 - tenta entregar também os materiais que já estavam na Loot Pouch, usando o botão **Entregar** do Codex;
@@ -18,8 +25,6 @@ Extensão local para acompanhar a party do Baiak Idle, analisar a hunt seleciona
 - prioriza a missão que fica mais perto de terminar com os materiais disponíveis, sem usar equipamentos ou gold para desbloquear;
 - se a vaga do Auto Collect estiver ocupada, guarda a missão escolhida no jogo e a restaura ao desligar a Auto entrega.
 
-Abra **C** no cabeçalho do Jarvis para ligar ou desligar a Auto entrega. Ela começa desligada.
-
 ## Versão 0.8.25
 
 - reconhece o treino em casa pelo estado de treino do jogo, mesmo quando o título da hunt anterior continua visível;
@@ -27,8 +32,6 @@ Abra **C** no cabeçalho do Jarvis para ligar ou desligar a Auto entrega. Ela co
 - aguarda até a lista de favoritos se atualizar após cada chefe e tenta abrir o próximo disponível;
 - adiciona **Auto entrega** no painel Codex: ao ativar, escolhe a missão de hunt liberada mais próxima de completar com os materiais da Loot Pouch e usa o Auto Collect gratuito do jogo;
 - mantém equipamentos e desbloqueio automático com gold fora da entrega; não altera missões do Auto Collect escolhidas manualmente no jogo.
-
-A Auto entrega começa desligada. Ao ativá-la, materiais elegíveis são consumidos pelo Codex. Para desligar, use o mesmo botão.
 
 ## Versão 0.8.24
 
@@ -212,7 +215,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.28.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.29.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -223,7 +226,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.28.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.29.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -251,4 +254,4 @@ node .\tests\recovery.test.js
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.28 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.29 AUTO · execução local`.

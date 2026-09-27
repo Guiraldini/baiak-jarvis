@@ -24,6 +24,7 @@
     autoRepairHouse: true,
     maxRepairGold: 100000,
     codexVisible: true,
+    codexAuraEnabled: true,
     codexHuntId: "",
     codexAutoEnabled: false,
     codexAutoOwnedTarget: "",
@@ -83,6 +84,7 @@
   let codexExpandedTier = -1;
   let lastBossTelemetrySaveAt = 0;
   const BOSS_RUN_SESSION_KEY = "baiakJarvisBossRunV1";
+  let bossDay = { day: core.brazilDayKey(Date.now()), results: [] };
   const bossRun = {
     running: false, inFight: false, loopBusy: false, status: "idle", current: null,
     message: "Pronto para enfrentar os chefes favoritos disponíveis.",
@@ -104,7 +106,7 @@
     </header>
     <section class="bj-codex" id="bj-codex">
       <div class="bj-codex-head"><strong>CODEX DA HUNT</strong><span id="bj-codex-state">Aguardando o jogo</span></div>
-      <div class="bj-codex-auto"><button type="button" data-action="toggle-codex-auto" id="bj-codex-auto-toggle"></button><span id="bj-codex-auto-status"></span></div>
+      <div class="bj-codex-controls"><button type="button" data-action="toggle-codex-aura" id="bj-codex-aura-toggle"></button></div>
       <label class="bj-codex-choice"><span>Missão</span><select id="bj-codex-select" title="Escolher hunt do Codex"></select></label>
       <div id="bj-codex-missions"></div>
     </section>
@@ -193,10 +195,10 @@
             <span id="bj-boss-progress">0 vitórias · 0 tentativas</span>
             <span id="bj-boss-charges">Cargas: —</span>
           </div>
-          <div id="bj-boss-summary" class="bj-boss-summary">XP total da run: aguardando a primeira vitória.</div>
+          <div id="bj-boss-summary" class="bj-boss-summary">XP de hoje: aguardando a primeira vitória.</div>
           <div class="bj-boss-note">Cada entrada gasta uma carga, inclusive se a party perder. A run para após uma derrota, resultado incerto ou pedido de escolha de dificuldade. Parar não cancela uma luta já iniciada.</div>
-          <div class="bj-section-title">NESTA RUN</div>
-          <div id="bj-boss-history" class="bj-boss-history">Nenhum chefe enfrentado nesta run.</div>
+          <div class="bj-section-title">NESTA RUN · TOTAL DE HOJE</div>
+          <div id="bj-boss-history" class="bj-boss-history">Nenhum chefe enfrentado hoje.</div>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-sets">
@@ -519,12 +521,18 @@
   }
 
   function renderLootCodexAuras() {
+    const toggle = host.querySelector("#bj-codex-aura-toggle");
+    if (toggle) {
+      toggle.textContent = settings.codexAuraEnabled ? "Destaque vermelho: ligado" : "Destaque vermelho: desligado";
+      toggle.setAttribute("aria-pressed", String(settings.codexAuraEnabled));
+    }
     const grid = document.querySelector("#inv-grid");
     if (!grid) return;
     for (const cell of grid.children) {
       if (!cell.classList.contains("cell")) continue;
       const { name, tier } = lootPouchItem(cell);
-      const pending = settings.enabled && name ? core.codexItemNeeds(name, tier, codexItemCatalog, codexProgress) : null;
+      const pending = settings.enabled && settings.codexAuraEnabled && name
+        ? core.codexItemNeeds(name, tier, codexItemCatalog, codexProgress) : null;
       const needed = Boolean(pending?.length);
       if (cell.classList.contains("bj-codex-needed") !== needed) cell.classList.toggle("bj-codex-needed", needed);
       if (needed && cell.dataset.bjCodexMissing !== String(pending.length)) cell.dataset.bjCodexMissing = String(pending.length);
@@ -1040,6 +1048,7 @@
   }
 
   function renderBossRun() {
+    ensureBossDay();
     const panel = host.querySelector("#bj-boss-status");
     if (!panel) return;
     panel.dataset.status = bossRun.status;
@@ -1054,20 +1063,36 @@
     toggle.setAttribute("aria-pressed", String(bossRun.running));
     host.querySelector("#bj-boss-progress").textContent = `${bossRun.wins} vitória${bossRun.wins === 1 ? "" : "s"} · ${bossRun.attempted.length} tentativa${bossRun.attempted.length === 1 ? "" : "s"}`;
     host.querySelector("#bj-boss-charges").textContent = bossRun.charges == null ? "Cargas: —" : `Cargas: ${bossRun.charges}/${bossRun.maxCharges}`;
-    const measured = bossRun.results.filter((result) => Number.isFinite(result.xpTotal));
+    const measured = bossDay.results.filter((result) => Number.isFinite(result.xpTotal));
     const totalXp = measured.reduce((sum, result) => sum + result.xpTotal, 0);
     host.querySelector("#bj-boss-summary").textContent = measured.length
-      ? `XP total da run: ${formatNumber(totalXp)} · ${measured.length} chefe${measured.length === 1 ? "" : "s"} com XP medida`
-      : "XP total da run: aguardando medição.";
-    host.querySelector("#bj-boss-history").innerHTML = bossRun.results?.length
-      ? bossRun.results.map((result) => `<article class="bj-boss-result">
+      ? `XP de hoje: ${formatNumber(totalXp)} · ${measured.length} luta${measured.length === 1 ? "" : "s"} com XP medida`
+      : "XP de hoje: aguardando medição.";
+    host.querySelector("#bj-boss-history").innerHTML = bossDay.results.length
+      ? [...bossDay.results].reverse().map((result) => `<article class="bj-boss-result">
           <div class="bj-boss-result-head"><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.outcome)}</span></div>
           <div class="bj-boss-result-stats"><span>XP: <b>${Number.isFinite(result.xpTotal) ? formatNumber(result.xpTotal) : "—"}</b></span><span>Tempo: <b>${Number.isFinite(result.durationSeconds) ? formatElapsed(result.durationSeconds) : "—"}</b></span></div>
           ${result.xpByCharacter?.length ? `<div class="bj-boss-result-detail">XP por personagem: ${result.xpByCharacter.map((entry) => `${escapeHtml(entry.name)} <b>${formatNumber(entry.gain)}</b>`).join(" · ")}</div>` : ""}
           ${result.damageLeader ? `<div class="bj-boss-result-leader">Maior dano somado: <b>${escapeHtml(result.damageLeader.name)} · ${formatNumber(result.damageLeader.total)}</b></div>` : ""}
           ${result.damageByCharacter?.length ? `<div class="bj-boss-result-damage">${result.damageByCharacter.map((entry) => `<span>${escapeHtml(entry.name)} <b>${formatNumber(entry.total)}</b></span>`).join("")}</div>` : ""}
         </article>`).join("")
-      : "Nenhum chefe enfrentado nesta run.";
+      : "Nenhum chefe enfrentado hoje.";
+  }
+
+  function ensureBossDay() {
+    const today = core.brazilDayKey(Date.now());
+    if (bossDay.day === today) return false;
+    bossDay = core.addDailyBossResult(null, null, today);
+    ext.storage.local.set({ bjBossDay: bossDay }).catch(() => {});
+    return true;
+  }
+
+  function recordBossDayResult(result) {
+    if (!result) return;
+    ensureBossDay();
+    result.id ||= `${bossRun.startedAt}-${bossRun.results.indexOf(result)}`;
+    bossDay = core.addDailyBossResult(bossDay, { ...result }, bossDay.day);
+    ext.storage.local.set({ bjBossDay: bossDay }).catch(() => {});
   }
 
   function setBossRunState(status, message) {
@@ -1269,17 +1294,17 @@
   async function waitForBossButton(modal, name) {
     let readyButton = null;
     let readySince = 0;
-    for (let attempt = 0; attempt < 24 && bossRun.running; attempt += 1) {
+    for (let attempt = 0; attempt < 40 && bossRun.running; attempt += 1) {
       const cell = findBossCell(modal, name);
       if (cell && !cell.classList.contains("expanded")) cell.click();
       const button = cell?.querySelector(".boss-cell-go");
-      if (cell?.classList.contains("expanded") && cell.querySelector(".boss-cell-fav.on")
+      if (cell?.isConnected && cell.classList.contains("expanded") && cell.querySelector(".boss-cell-fav.on")
         && isVisible(button) && !button.disabled && readBossCharges(modal)?.left > 0) {
         if (readyButton !== button) {
           readyButton = button;
           readySince = Date.now();
         }
-        if (Date.now() - readySince >= 500) return button;
+        if (Date.now() - readySince >= 1200 && button.isConnected) return button;
       } else {
         readyButton = null;
       }
@@ -1289,15 +1314,25 @@
     throw new Error(`O botão Enfrentar de ${name} não ficou disponível no jogo.`);
   }
 
-  async function waitForBossEntry(name) {
+  async function waitForBossEntry(name, previousCharges, modal) {
     const started = Date.now();
-    while (Date.now() - started < 20000) {
+    let retried = false;
+    while (Date.now() - started < 32000) {
       sampleBossDamage();
       if (bossFightVisible(name)) return;
       if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
         throw new Error(`${name} exige escolher a dificuldade no jogo. A run parou antes de gastar uma carga.`);
       }
+      if (readBossCharges(modal)?.left < previousCharges) return;
       if (gameFailureDetected() || !navigator.onLine) throw new Error("O jogo desconectou antes de confirmar a entrada no chefe.");
+      if (!retried && Date.now() - started >= 12000 && isVisible(modal)
+        && readBossCharges(modal)?.left === previousCharges) {
+        retried = true;
+        setBossRunState("running", `Aguardando ${name}; verificando o botão Enfrentar novamente…`);
+        const button = await waitForBossButton(modal, name);
+        if (button?.isConnected && !button.disabled && isVisible(button)
+          && readBossCharges(modal)?.left === previousCharges && !bossFightVisible(name)) button.click();
+      }
       await delay(250);
     }
     throw new Error(`O jogo não confirmou a entrada em ${name}. Se apareceu uma escolha de dificuldade, faça essa luta manualmente.`);
@@ -1349,7 +1384,7 @@
       bossRun.attempted.push(name);
     }
     if (!bossRun.results.some((result) => result.name === name)) {
-      bossRun.results.push({ name, outcome: "Em andamento…" });
+      bossRun.results.push({ id: `${bossRun.startedAt}-${bossRun.results.length}`, name, outcome: "Em andamento…" });
     }
   }
 
@@ -1384,6 +1419,7 @@
       if (result) Object.assign(result, metrics);
     }
     if (result) result.outcome = outcome === "victory" ? "Vitória" : "Derrota";
+    recordBossDayResult(result);
     if (outcome === "victory") bossRun.wins += 1;
     bossRun.current = null;
     bossRun.phase = "choosing";
@@ -1411,7 +1447,7 @@
         if (automationBusy || refreshBusy) throw new Error("Outra ação do Jarvis está em andamento. Tente iniciar a run novamente.");
         if (bossRun.current) {
           await finishCurrentBoss();
-          if (bossRun.running) await delay(800);
+          if (bossRun.running) await delay(1800);
           continue;
         }
         const xpBefore = await readBossPartyXp().catch(() => ({}));
@@ -1442,8 +1478,12 @@
         bossRun.current = name;
         bossRun.phase = "choosing";
         setBossRunState("running", `Abrindo ${name}…`);
-        const button = await waitForBossButton(modal, name);
+        let button = await waitForBossButton(modal, name);
         if (!bossRun.running) break;
+        if (!button.isConnected || button.disabled || !isVisible(button)
+          || findBossCell(modal, name)?.querySelector(".boss-cell-go") !== button) {
+          button = await waitForBossButton(modal, name);
+        }
         const previous = cards.find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
         bossRun.inFight = true;
         bossRun.phase = "entering";
@@ -1457,12 +1497,12 @@
         bossRun.damageReset = {};
         setBossRunState("running", `Enfrentando ${name}…`);
         button.click();
-        await waitForBossEntry(name);
+        await waitForBossEntry(name, charges.left, modal);
         recordBossAttempt(name);
         bossRun.phase = "fighting";
         setBossRunState("running", `Aguardando o fim da luta com ${name}…`);
         await finishCurrentBoss();
-        if (bossRun.running) await delay(800);
+        if (bossRun.running) await delay(1800);
       }
       if (bossRun.running) {
         bossRun.running = false;
@@ -2614,8 +2654,7 @@
       scanHouseInvites().catch((error) => { houseScanMessage = error.message; renderTraining(); });
     }
     maybeRepairHouseDummy(latestSnapshot);
-    if (settings.codexAutoEnabled) maybeAutoCodex().catch(() => {});
-    else if (settings.codexAutoOwnedTarget || settings.codexAutoPreviousTarget) releaseGameAutoCodex().catch(() => {});
+    if (settings.codexAutoOwnedTarget || settings.codexAutoPreviousTarget) releaseGameAutoCodex().catch(() => {});
     if (!refreshBusy) scanSkillsPanel(Boolean(forceSkillsScan)).catch(() => {});
     saveHistory(latestSnapshot).catch(() => {});
   }
@@ -2650,6 +2689,7 @@
     if (!settings.enabled) renderLootCodexAuras();
     host.classList.toggle("bj-minimized", settings.minimized);
     renderCodex();
+    renderLootCodexAuras();
     const minimizeButton = host.querySelector('[data-action="minimize"]');
     minimizeButton.textContent = settings.minimized ? "+" : "−";
     minimizeButton.title = settings.minimized ? "Expandir" : "Minimizar";
@@ -2678,13 +2718,10 @@
       await ext.storage.local.set({ bjSettings: settings });
       return;
     }
-    if (action === "toggle-codex-auto") {
-      settings.codexAutoEnabled = !settings.codexAutoEnabled;
-      codexAutoMessage = settings.codexAutoEnabled ? "Buscando a melhor missão liberada…" : "Desligando a entrega no jogo…";
-      renderCodexAutoStatus();
+    if (action === "toggle-codex-aura") {
+      settings.codexAuraEnabled = !settings.codexAuraEnabled;
+      renderLootCodexAuras();
       await ext.storage.local.set({ bjSettings: settings });
-      if (settings.codexAutoEnabled) maybeAutoCodex().catch(() => {});
-      else releaseGameAutoCodex().catch(() => {});
       return;
     }
     if (action === "codex-tier") {
@@ -2816,8 +2853,9 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjDailyXp: null }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjDailyXp }) => {
-    settings = { ...defaults, ...bjSettings };
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjDailyXp: null, bjBossDay: null }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjDailyXp, bjBossDay }) => {
+    settings = { ...defaults, ...bjSettings, codexAutoEnabled: false };
+    if (bjSettings?.codexAutoEnabled) ext.storage.local.set({ bjSettings: settings }).catch(() => {});
     profiles = { ...profiles, ...(bjProfiles || {}) };
     huntOptions = Array.isArray(bjHuntOptions) && bjHuntOptions.length ? bjHuntOptions : ["Cobras"];
     huntRuns = Array.isArray(bjHuntRuns) ? bjHuntRuns : [];
@@ -2827,7 +2865,16 @@
       && Number.isFinite(bjDailyXp.waves) && bjDailyXp.waves >= 0;
     dailyXp = validDaily ? bjDailyXp : core.dailyHuntXp(huntRuns, today);
     if (!validDaily) persistHuntState().catch(() => {});
+    bossDay = core.addDailyBossResult(bjBossDay, null, today);
     const resumeBossRun = restoreBossRun();
+    if (!bossDay.results.length && core.brazilDayKey(bossRun.startedAt) === today) {
+      for (const [index, result] of bossRun.results.entries()) {
+        if (!result || result.outcome === "Em andamento…") continue;
+        bossDay = core.addDailyBossResult(bossDay,
+          { ...result, id: result.id || `${bossRun.startedAt}-${index}` }, today);
+      }
+    }
+    ext.storage.local.set({ bjBossDay: bossDay }).catch(() => {});
     schedule();
     if (resumeBossRun) runFavoriteBosses().finally(() => { bossRun.loopBusy = false; renderBossRun(); });
     setTimeout(() => scanHuntOptions(false).catch(() => {}), 1500);
@@ -2835,7 +2882,7 @@
 
   ext.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes.bjSettings) {
-      settings = { ...defaults, ...changes.bjSettings.newValue };
+      settings = { ...defaults, ...changes.bjSettings.newValue, codexAutoEnabled: false };
       schedule();
     }
     if (area === "local" && changes.bjHuntOptions) {

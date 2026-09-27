@@ -717,6 +717,13 @@
     return { type: "fight", name: chosen.name };
   }
 
+  function addDailyBossResult(state, result, day) {
+    const current = state?.day === day && Array.isArray(state.results)
+      ? { day, results: [...state.results] } : { day, results: [] };
+    if (result && !current.results.some((entry) => entry.id === result.id)) current.results.push(result);
+    return current;
+  }
+
   function summarizeBossFight(beforeXp, afterXp, damagePeak, durationSeconds) {
     const beforeEntries = Object.entries(beforeXp || {});
     const xpByCharacter = beforeEntries.flatMap(([key, before]) => {
@@ -898,6 +905,7 @@
     bossModeDetected,
     bossFightSignal,
     bossRunDecision,
+    addDailyBossResult,
     summarizeBossFight,
     addDailyHuntRun,
     createLatestWriteQueue,
