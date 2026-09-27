@@ -69,9 +69,11 @@
 #baiak-jarvis .bj-codex-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 #baiak-jarvis .bj-codex-head strong { color: var(--bj-gold); font-size: 10px; letter-spacing: .1em; }
 #baiak-jarvis .bj-codex-head span { color: #7bd89c; font-size: 8px; }
-#baiak-jarvis .bj-codex-controls { margin-top: 8px; }
-#baiak-jarvis .bj-codex-controls button { padding: 5px 7px; font-size: 9px; }
-#baiak-jarvis .bj-codex-controls button[aria-pressed="true"] { color: #15120b; background: var(--bj-gold); border-color: var(--bj-gold); }
+#baiak-jarvis .bj-codex-controls { margin-top: 9px; }
+#baiak-jarvis .bj-codex-controls button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 28px; padding: 0 9px; text-align: left; font-size: 9px; border-color: rgba(255,255,255,.13); }
+#baiak-jarvis .bj-codex-controls button b { flex: 0 0 auto; color: var(--bj-muted); font-size: 9px; }
+#baiak-jarvis .bj-codex-controls button[aria-pressed="true"] { border-color: rgba(231,184,78,.5); background: rgba(231,184,78,.11); }
+#baiak-jarvis .bj-codex-controls button[aria-pressed="true"] b { color: var(--bj-gold); }
 #baiak-jarvis .bj-codex-choice { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
 #baiak-jarvis .bj-codex-choice span { color: var(--bj-muted); font-size: 9px; }
 #baiak-jarvis .bj-codex-choice select { flex: 1; min-width: 0; padding: 5px; color: var(--bj-text); background: #101821; border: 1px solid #354255; border-radius: 5px; font-size: 9px; }

@@ -9,6 +9,8 @@ const GAME_URL = /^https:\/\/(?:www\.)?baiakidle\.com\/jogar\/?/i;
 const RELOAD_COOLDOWN = 5 * 60 * 1000;
 const GITHUB_RELEASE_API = "https://api.github.com/repos/Guiraldini/baiak-jarvis/releases/latest";
 const GITHUB_RELEASE_PAGE = "https://github.com/Guiraldini/baiak-jarvis/releases/latest";
+const GAME_MATCHES = ["https://baiakidle.com/jogar/*", "https://www.baiakidle.com/jogar/*"];
+const CONTENT_FILES = ["src/equipment-catalog.js", "src/codex-catalog.js", "src/codex-item-catalog.js", "src/core.js", "src/content.js"];
 const PACKAGE_BROWSER = (() => {
   const agent = globalThis.navigator?.userAgent || "";
   if (/\bFirefox\/\d/i.test(agent)) return "firefox";
@@ -34,17 +36,37 @@ async function reloadGameTab(tabId, reason) {
   return true;
 }
 
+async function activateInOpenGameTabs() {
+  const tabs = await ext.tabs.query({ url: GAME_MATCHES });
+  for (const tab of tabs) {
+    if (!Number.isInteger(tab.id)) continue;
+    const target = { tabId: tab.id };
+    try {
+      await ext.scripting.insertCSS({ target, files: ["src/content.css"] });
+      // A ponte antiga permanece na página; uma instalação nova recebe a ponte aqui.
+      try {
+        await ext.scripting.executeScript({ target, files: ["src/codex-bridge.js"], world: "MAIN" });
+      } catch (_error) { /* Firefox antigo pode não oferecer o mundo MAIN. */ }
+      await ext.scripting.executeScript({ target, files: CONTENT_FILES });
+    } catch (error) {
+      console.warn(`Jarvis não conseguiu ativar a aba ${tab.id} sem recarregar:`, error);
+    }
+  }
+}
+
 ext.runtime.onInstalled.addListener(() => {
   ext.alarms.create("bj-watchdog", { periodInMinutes: 1 });
+  return activateInOpenGameTabs().catch((error) => console.warn("Jarvis não conseguiu reativar as abas abertas:", error));
 });
 
 ext.runtime.onStartup.addListener(() => {
   ext.alarms.create("bj-watchdog", { periodInMinutes: 1 });
+  return activateInOpenGameTabs().catch((error) => console.warn("Jarvis não conseguiu reativar as abas abertas:", error));
 });
 
 ext.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== "bj-watchdog") return;
-  const tabs = await ext.tabs.query({ url: ["https://baiakidle.com/jogar/*", "https://www.baiakidle.com/jogar/*"] });
+  const tabs = await ext.tabs.query({ url: GAME_MATCHES });
   const now = Date.now();
   for (const tab of tabs) {
     const seen = heartbeats.get(tab.id);

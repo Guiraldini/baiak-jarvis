@@ -12,17 +12,24 @@ async function testBrowser(sourceBrowser, exposeBrowserApi, actualBrowser = sour
   const downloads = [];
   const openedTabs = [];
   const fetchRequests = [];
+  const injections = [];
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, `../${sourceBrowser}/manifest.json`), "utf8"));
   const extension = {
     alarms: { get: async () => ({}), create: () => {}, onAlarm: { addListener: () => {} } },
     runtime: {
       getManifest: () => manifest,
-      onInstalled: { addListener: () => {} }, onStartup: { addListener: () => {} },
+      onInstalled: { addListener: (listener) => { listeners.installed = listener; } },
+      onStartup: { addListener: () => {} },
       onMessage: { addListener: (listener) => { listeners.message = listener; } }
     },
     tabs: {
       onRemoved: { addListener: () => {} },
+      query: async () => [{ id: 17, url: "https://baiakidle.com/jogar/" }],
       create: async (options) => { openedTabs.push(options); return { id: 1 }; }
+    },
+    scripting: {
+      insertCSS: async (options) => { injections.push({ type: "css", ...options }); },
+      executeScript: async (options) => { injections.push({ type: "js", ...options }); }
     },
     downloads: { download: async (options) => { downloads.push(options); return 42; } }
   };
@@ -57,6 +64,13 @@ async function testBrowser(sourceBrowser, exposeBrowserApi, actualBrowser = sour
   assert.equal((await send({ type: "bj:download-release", url: release.downloadUrl })).ok, true);
   assert.equal(downloads[0].url, assetFor(actualBrowser));
   assert.equal(openedTabs.length, 0);
+  await listeners.installed({ reason: "update" });
+  assert.equal(injections.length, 3);
+  assert.equal(injections[0].type, "css");
+  assert.deepEqual(Array.from(injections[0].files), ["src/content.css"]);
+  assert.equal(injections[1].world, "MAIN");
+  assert.equal(injections[2].files.at(-1), "src/content.js");
+  assert.equal(injections[2].target.tabId, 17);
 }
 
 (async () => {

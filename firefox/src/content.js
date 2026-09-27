@@ -1,14 +1,20 @@
 (function () {
   "use strict";
 
-  if (window.top !== window || document.getElementById("baiak-jarvis")) return;
-
   const ext = globalThis.browser || globalThis.chrome;
+  if (window.top !== window) return;
+  const extensionVersion = ext.runtime.getManifest().version;
+  const previousHost = document.getElementById("baiak-jarvis");
+  if (previousHost?.dataset.bjVersion === extensionVersion) return;
+  if (previousHost) {
+    document.dispatchEvent(new Event("baiak-jarvis:dispose"));
+    previousHost.remove();
+  }
+
   const core = globalThis.BaiakJarvisCore;
   const equipmentCatalog = globalThis.BaiakJarvisEquipmentCatalog || { items: [], capturedAt: null };
   const codexCatalog = globalThis.BaiakJarvisCodexCatalog || [];
   const codexItemCatalog = globalThis.BaiakJarvisCodexItemCatalog || { missions: [], items: {} };
-  const extensionVersion = ext.runtime.getManifest().version;
   const defaults = {
     enabled: true,
     objective: "balanced",
@@ -37,6 +43,9 @@
   let latestSnapshot = null;
   let latestPlan = null;
   let timer = null;
+  let heartbeatTimer = null;
+  let gameObserver = null;
+  let disposed = false;
   let lastHistoryAt = 0;
   let stageState = { key: null, status: "idle", data: null, error: null };
   let autoState = { status: "idle", message: "Aguardando leitura da stamina." };
@@ -95,6 +104,7 @@
 
   const host = document.createElement("aside");
   host.id = "baiak-jarvis";
+  host.dataset.bjVersion = extensionVersion;
   host.innerHTML = `
     <header class="bj-header">
       <div><strong><span class="bj-pulse"></span> JARVIS</strong></div>
@@ -106,7 +116,7 @@
     </header>
     <section class="bj-codex" id="bj-codex">
       <div class="bj-codex-head"><strong>CODEX DA HUNT</strong><span id="bj-codex-state">Aguardando o jogo</span></div>
-      <div class="bj-codex-controls"><button type="button" data-action="toggle-codex-aura" id="bj-codex-aura-toggle"></button></div>
+      <div class="bj-codex-controls"><button type="button" data-action="toggle-codex-aura" id="bj-codex-aura-toggle" aria-label="Destacar itens da Loot Pouch"><span>Destacar itens da Loot Pouch</span><b id="bj-codex-aura-state"></b></button></div>
       <label class="bj-codex-choice"><span>Missão</span><select id="bj-codex-select" title="Escolher hunt do Codex"></select></label>
       <div id="bj-codex-missions"></div>
     </section>
@@ -221,6 +231,7 @@
   codexSelect.innerHTML = `<option value="">Hunt atual (automático)</option>${codexCatalog.map((hunt) =>
     `<option value="${escapeHtml(hunt.id)}">${escapeHtml(hunt.name)}</option>`).join("")}`;
   document.addEventListener("baiak-jarvis:codex", (event) => {
+    if (disposed) return;
     try {
       const payload = JSON.parse(event.detail);
       if (!Array.isArray(payload.done) || !payload.prog || typeof payload.prog !== "object") return;
@@ -232,6 +243,7 @@
   });
   document.dispatchEvent(new Event("baiak-jarvis:codex-request"));
   document.addEventListener("baiak-jarvis:codex-auto", (event) => {
+    if (disposed) return;
     try {
       const value = JSON.parse(event.detail);
       if (!Array.isArray(value.targets)) return;
@@ -245,6 +257,7 @@
   });
   document.dispatchEvent(new Event("baiak-jarvis:codex-auto-request"));
   document.addEventListener("baiak-jarvis:mode", (event) => {
+    if (disposed) return;
     if (event.detail !== "exercise" && event.detail !== "hunt" && event.detail !== "boss") return;
     lastGameMode = event.detail;
     lastGameModeAt = Date.now();
@@ -523,8 +536,8 @@
   function renderLootCodexAuras() {
     const toggle = host.querySelector("#bj-codex-aura-toggle");
     if (toggle) {
-      toggle.textContent = settings.codexAuraEnabled ? "Destaque vermelho: ligado" : "Destaque vermelho: desligado";
       toggle.setAttribute("aria-pressed", String(settings.codexAuraEnabled));
+      host.querySelector("#bj-codex-aura-state").textContent = settings.codexAuraEnabled ? "Ligado" : "Desligado";
     }
     const grid = document.querySelector("#inv-grid");
     if (!grid) return;
@@ -2645,7 +2658,7 @@
   }
 
   function tick(forceSkillsScan) {
-    if (!settings.enabled) return;
+    if (disposed || !settings.enabled) return;
     latestSnapshot = readSnapshot();
     if (core.normalizeLookup(latestSnapshot.location) !== "casa") currentHouseOwner = "";
     render(latestSnapshot);
@@ -2684,6 +2697,7 @@
   }
 
   function schedule() {
+    if (disposed) return;
     if (timer) clearInterval(timer);
     host.classList.toggle("bj-hidden", !settings.enabled);
     if (!settings.enabled) renderLootCodexAuras();
@@ -2881,6 +2895,7 @@
   });
 
   ext.storage.onChanged.addListener((changes, area) => {
+    if (disposed) return;
     if (area === "local" && changes.bjSettings) {
       settings = { ...defaults, ...changes.bjSettings.newValue, codexAutoEnabled: false };
       schedule();
@@ -2906,15 +2921,24 @@
 
   const gameRoot = document.querySelector("#app");
   if (gameRoot) {
-    new MutationObserver(() => {
+    gameObserver = new MutationObserver(() => {
       if (!skillsScanBusy && !huntScanBusy) lastGameMutationAt = Date.now();
       if (bossRun.inFight) sampleBossDamage();
-    }).observe(gameRoot, {
+    });
+    gameObserver.observe(gameRoot, {
       subtree: true, childList: true, characterData: true, attributes: true
     });
   }
-  setInterval(sendHeartbeat, 15000);
+  heartbeatTimer = setInterval(sendHeartbeat, 15000);
   window.addEventListener("online", sendHeartbeat);
+  document.addEventListener("baiak-jarvis:dispose", () => {
+    disposed = true;
+    bossRun.running = false;
+    if (timer) clearInterval(timer);
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    gameObserver?.disconnect();
+    window.removeEventListener("online", sendHeartbeat);
+  }, { once: true });
   sendHeartbeat();
 
   enableDrag();
