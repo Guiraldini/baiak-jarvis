@@ -380,7 +380,8 @@
     const trainingGain = config.trainingDurationMinutes * config.trainingRate;
     const huntCeiling = Math.min(config.maxMinutes, huntFloor + trainingGain);
     const plannedHuntMinutes = huntCeiling - huntFloor;
-    const isTraining = Boolean(snapshot.isTraining) || /treino|casa/i.test(`${snapshot.location || ""} ${snapshot.activity || ""}`);
+    const isTraining = typeof snapshot.isTraining === "boolean" ? snapshot.isTraining
+      : /treino|casa/i.test(`${snapshot.location || ""} ${snapshot.activity || ""}`);
     const vipActive = config.trainingRate >= 8;
     const floorPercent = Math.round((huntFloor / config.maxMinutes) * 100);
     const ceilingPercent = Math.round((huntCeiling / config.maxMinutes) * 100);
@@ -705,14 +706,15 @@
     if (!plan) return null;
     const location = normalizeLookup(snapshot.location || "");
     const trainingTarget = config.trainingMode === "house" ? "Casa" : "Treino online";
-    const isTraining = Boolean(snapshot.isTraining) || location.includes("treino online") || location === "casa" || /treinando/i.test(snapshot.activity || "");
+    const isTraining = typeof snapshot.isTraining === "boolean" ? snapshot.isTraining
+      : location.includes("treino online") || location === "casa" || /treinando/i.test(snapshot.activity || "");
     const huntKey = normalizeLookup(config.huntName);
     const isTargetHunt = !isTraining && Boolean(huntKey) && (location.includes(huntKey) || huntKey.includes(location));
 
     if (plan.currentMinutes <= plan.huntFloor && !isTraining) {
       return { type: "train", target: trainingTarget, reason: `Stamina chegou a ${formatMinutes(plan.huntFloor)} (${plan.floorPercent}%).` };
     }
-    if (plan.currentMinutes >= plan.huntCeiling && !isTargetHunt) {
+    if (plan.currentMinutes >= plan.huntCeiling && isTraining && !isTargetHunt) {
       return { type: "hunt", target: config.huntName, reason: `Stamina chegou a ${formatMinutes(plan.huntCeiling)} (${plan.targetPercent}%).` };
     }
     return null;

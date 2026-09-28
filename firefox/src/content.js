@@ -96,6 +96,8 @@
   let codexAutoMessage = "Lê toda a Loot Pouch e entrega em códex liberados, sem precisar favoritar; equipamentos ficam de fora.";
   let lastGameMode = "";
   let lastGameModeAt = 0;
+  let lastRawLocation = null;
+  let lastRawLocationChangedAt = 0;
   let lastCodexHuntId = "";
   let lastCodexRender = "";
   let codexExpandedTier = -1;
@@ -329,7 +331,11 @@
     const gameRoot = document.querySelector("#app") || document.body;
     const location = (document.querySelector("#wave-title")?.textContent || "").replace(/▾/g, "");
     const snapshot = core.parseSnapshot({ text: gameRoot ? gameRoot.innerText : "", title: document.title, location, loopEnabled: detectLoop(), now: Date.now() });
-    const modeIsTraining = Date.now() - lastGameModeAt < 30000 && lastGameMode === "exercise";
+    const locationKey = core.normalizeLookup(location);
+    if (lastRawLocation !== null && locationKey && locationKey !== lastRawLocation) lastRawLocationChangedAt = Date.now();
+    if (locationKey) lastRawLocation = locationKey;
+    const modeIsTraining = lastGameModeAt > lastRawLocationChangedAt
+      && Date.now() - lastGameModeAt < 30000 && lastGameMode === "exercise";
     const trainingOverlay = document.querySelector("#training-overlay:not(.hidden) .trn-row");
     snapshot.isTraining = modeIsTraining || Boolean(trainingOverlay) || /^(casa|treino online)$/i.test(core.clean(location));
     if (snapshot.isTraining && !/^(casa|treino online)$/i.test(core.clean(location))) {
