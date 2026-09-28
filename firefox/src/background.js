@@ -10,7 +10,7 @@ const RELOAD_COOLDOWN = 5 * 60 * 1000;
 const GITHUB_RELEASE_API = "https://api.github.com/repos/Guiraldini/baiak-jarvis/releases/latest";
 const GITHUB_RELEASE_PAGE = "https://github.com/Guiraldini/baiak-jarvis/releases/latest";
 const GAME_MATCHES = ["https://baiakidle.com/jogar/*", "https://www.baiakidle.com/jogar/*"];
-const CONTENT_FILES = ["src/equipment-catalog.js", "src/codex-catalog.js", "src/codex-item-catalog.js", "src/core.js", "src/content.js"];
+const CONTENT_FILES = ["src/equipment-catalog.js", "src/codex-catalog.js", "src/codex-item-catalog.js", "src/core.js", "src/hunt-xp-catalog.js", "src/content.js"];
 const PACKAGE_BROWSER = (() => {
   const agent = globalThis.navigator?.userAgent || "";
   if (/\bFirefox\/\d/i.test(agent)) return "firefox";

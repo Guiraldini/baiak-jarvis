@@ -275,6 +275,31 @@
 #baiak-jarvis .bj-optimizer-bar a { padding: 5px 7px; color: #b7cff0; border: 1px solid #32445a; border-radius: 5px; font-size: 9px; text-decoration: none; white-space: nowrap; }
 #baiak-jarvis #bj-optimizer-frame { display: block; width: 100%; height: min(580px, calc(100vh - 210px)); min-height: 360px; background: #0b1016; border: 1px solid rgba(231,184,78,.2); border-radius: 8px; }
 #baiak-jarvis .bj-hunts-view { height: min(580px, calc(100vh - 210px)); min-height: 360px; padding: 9px 3px 4px; overflow: auto; scrollbar-width: thin; scrollbar-color: #596575 transparent; }
+#baiak-jarvis .bj-theory-view { height: min(580px, calc(100vh - 210px)); min-height: 360px; padding: 11px 3px 6px; overflow: auto; scrollbar-width: thin; }
+#baiak-jarvis .bj-theory-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#baiak-jarvis .bj-theory-heading strong { display: block; color: var(--bj-gold); font-size: 10px; letter-spacing: .1em; }
+#baiak-jarvis .bj-theory-heading small { display: block; margin-top: 3px; color: var(--bj-muted); font-size: 9px; }
+#baiak-jarvis .bj-theory-heading button { width: auto; height: 29px; padding: 0 10px; border-color: rgba(231,184,78,.3); white-space: nowrap; font-size: 9px; }
+#baiak-jarvis .bj-theory-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 13px 0 7px; }
+#baiak-jarvis .bj-theory-controls label { display: grid; gap: 4px; color: var(--bj-muted); font-size: 9px; }
+#baiak-jarvis .bj-theory-controls select, #baiak-jarvis .bj-theory-controls input { width: 100%; min-width: 0; height: 30px; padding: 0 8px; color: var(--bj-text); background: #101821; border: 1px solid #354255; border-radius: 5px; font: inherit; }
+#baiak-jarvis .bj-theory-status { min-height: 17px; margin: 0 0 8px; color: #93b9dc; font-size: 9px; }
+#baiak-jarvis .bj-theory-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; align-items: start; }
+#baiak-jarvis .bj-theory-card { min-width: 0; overflow: hidden; background: var(--bj-panel); border: 1px solid rgba(255,255,255,.09); border-radius: 7px; }
+#baiak-jarvis .bj-theory-card[open] { border-color: rgba(231,184,78,.42); }
+#baiak-jarvis .bj-theory-card summary { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px; cursor: pointer; list-style: none; }
+#baiak-jarvis .bj-theory-card summary::-webkit-details-marker { display: none; }
+#baiak-jarvis .bj-theory-rank { display: grid; place-items: center; flex: 0 0 25px; height: 25px; color: #e7b84e; background: rgba(231,184,78,.12); border-radius: 5px; font-size: 10px; font-weight: 800; }
+#baiak-jarvis .bj-theory-name { flex: 1; min-width: 0; }
+#baiak-jarvis .bj-theory-name strong, #baiak-jarvis .bj-theory-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#baiak-jarvis .bj-theory-name strong { font-size: 11px; }
+#baiak-jarvis .bj-theory-name small { margin-top: 3px; color: var(--bj-muted); font-size: 8px; }
+#baiak-jarvis .bj-theory-card summary > b { flex: 0 0 auto; color: #8ee3ae; font-size: 10px; }
+#baiak-jarvis .bj-theory-monsters { padding: 1px 9px 9px 41px; color: var(--bj-muted); font-size: 9px; }
+#baiak-jarvis .bj-theory-monsters > div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-top: 1px solid rgba(255,255,255,.055); }
+#baiak-jarvis .bj-theory-monsters b { color: var(--bj-text); white-space: nowrap; }
+#baiak-jarvis .bj-theory-note { margin: 12px 0 0; padding: 9px; color: var(--bj-muted); background: rgba(231,184,78,.06); border-left: 2px solid var(--bj-gold); border-radius: 4px; font-size: 9px; }
+@media (max-width: 680px) { #baiak-jarvis .bj-theory-list, #baiak-jarvis .bj-theory-controls { grid-template-columns: 1fr; } }
 #baiak-jarvis .bj-hunts-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #baiak-jarvis .bj-hunts-heading strong { display: block; color: var(--bj-gold); font-size: 10px; letter-spacing: .1em; }
 #baiak-jarvis .bj-hunts-heading small { display: block; margin-top: 2px; color: var(--bj-muted); font-size: 9px; }

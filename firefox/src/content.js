@@ -36,6 +36,7 @@
     codexAutoOwnedTarget: "",
     codexAutoPreviousTarget: "",
     codexAutoPreviousEnabled: false,
+    theoryCharacter: "party",
     activeView: "dashboard"
   };
   let settings = { ...defaults };
@@ -56,6 +57,13 @@
   let lastSkillsScanAt = 0;
   let huntOptions = ["Cobras"];
   let huntScanBusy = false;
+  const huntXpCatalog = globalThis.BaiakJarvisHuntXpCatalog || { stages: [], capturedAt: null };
+  let huntXpLive = {};
+  let huntXpScanBusy = false;
+  let huntXpScanMessage = `Catálogo do jogo: ${huntXpCatalog.capturedAt || "data não informada"}.`;
+  let huntXpSaveTimer = null;
+  let huntXpDetailsObserver = null;
+  let lastTheoreticalRender = "";
   let houseScanBusy = false;
   let lastHouseScanAt = 0;
   let houseInvites = [];
@@ -124,6 +132,7 @@
       <nav class="bj-tabs" aria-label="Áreas do Jarvis">
         <button type="button" data-action="view-dashboard" aria-selected="true">Painel</button>
         <button type="button" data-action="view-hunts" aria-selected="false">Hunts</button>
+        <button type="button" data-action="view-theory" aria-selected="false">XP teórica</button>
         <button type="button" data-action="view-training" aria-selected="false">Treino</button>
         <button type="button" data-action="view-bosses" aria-selected="false">Chefes</button>
         <button type="button" data-action="view-sets" aria-selected="false">Sets</button>
@@ -173,6 +182,15 @@
           <div class="bj-hunt-summary" id="bj-hunt-summary"></div>
           <section class="bj-hunt-comparison"><div class="bj-section-title">COMPARATIVO DE RENDIMENTO</div><div id="bj-hunt-comparison"></div></section>
           <section class="bj-run-history"><div class="bj-section-title">ÚLTIMAS WAVES CONCLUÍDAS</div><div id="bj-run-history"></div></section>
+        </div>
+      </section>
+      <section class="bj-view bj-view-hidden" id="bj-view-theory">
+        <div class="bj-theory-view">
+          <div class="bj-theory-heading"><div><strong>HUNTS POR XP TEÓRICA</strong><small>XP base média por criatura, antes de medir waves.</small></div><button type="button" data-action="scan-hunt-xp" id="bj-theory-refresh">Ler Detalhes do jogo</button></div>
+          <div class="bj-theory-controls"><label>Comparar nível de<select id="bj-theory-character"><option value="party">Party · menor nível</option></select></label><label>Buscar hunt<input id="bj-theory-search" type="search" placeholder="Nome da hunt..."></label></div>
+          <p id="bj-theory-status" class="bj-theory-status"></p>
+          <div id="bj-theory-list" class="bj-theory-list"></div>
+          <p class="bj-theory-note">Ranking por XP base média dos monstros mostrados em Detalhes. Não prevê XP/h: quantidade de criaturas, tempo para matar, boss e bônus da party podem mudar o resultado. Nível é recomendação; hunts acima dele continuam na lista.</p>
         </div>
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-training">
@@ -932,6 +950,7 @@
     renderSets();
     monitorHuntRun(snapshot);
     renderHuntHistory();
+    if (settings.activeView === "theory") renderTheoreticalHunts();
 
     const recommendations = core.buildRecommendations(snapshot, settings.objective);
     host.querySelector("#bj-recommendations").innerHTML = recommendations.map((item) => `
@@ -1003,15 +1022,17 @@
   }
 
   async function switchView(view, persist = false) {
-    const selected = ["dashboard", "hunts", "training", "bosses", "sets", "optimizer"].includes(view) ? view : "dashboard";
+    const selected = ["dashboard", "hunts", "theory", "training", "bosses", "sets", "optimizer"].includes(view) ? view : "dashboard";
     host.querySelector("#bj-view-dashboard").classList.toggle("bj-view-hidden", selected !== "dashboard");
     host.querySelector("#bj-view-hunts").classList.toggle("bj-view-hidden", selected !== "hunts");
+    host.querySelector("#bj-view-theory").classList.toggle("bj-view-hidden", selected !== "theory");
     host.querySelector("#bj-view-training").classList.toggle("bj-view-hidden", selected !== "training");
     host.querySelector("#bj-view-bosses").classList.toggle("bj-view-hidden", selected !== "bosses");
     host.querySelector("#bj-view-sets").classList.toggle("bj-view-hidden", selected !== "sets");
     host.querySelector("#bj-view-optimizer").classList.toggle("bj-view-hidden", selected !== "optimizer");
     host.querySelector('[data-action="view-dashboard"]').setAttribute("aria-selected", String(selected === "dashboard"));
     host.querySelector('[data-action="view-hunts"]').setAttribute("aria-selected", String(selected === "hunts"));
+    host.querySelector('[data-action="view-theory"]').setAttribute("aria-selected", String(selected === "theory"));
     host.querySelector('[data-action="view-training"]').setAttribute("aria-selected", String(selected === "training"));
     host.querySelector('[data-action="view-bosses"]').setAttribute("aria-selected", String(selected === "bosses"));
     host.querySelector('[data-action="view-sets"]').setAttribute("aria-selected", String(selected === "sets"));
@@ -1026,6 +1047,7 @@
       if (!houseScanBusy && Date.now() - lastHouseScanAt > 60000) scanHouseInvites().catch((error) => { houseScanMessage = error.message; renderTraining(); });
     }
     if (selected === "sets") renderSets();
+    if (selected === "theory") renderTheoreticalHunts(true);
     if (persist) await ext.storage.local.set({ bjSettings: settings });
   }
 
@@ -1640,6 +1662,135 @@
     } finally {
       if (!pickerWasOpen) closeHuntPicker();
       huntScanBusy = false;
+    }
+  }
+
+  function readHuntXpDetails() {
+    const modal = document.querySelector("#hunt-details-modal");
+    if (!isVisible(modal)) return null;
+    const name = core.clean(modal.querySelector(".hd-head")?.textContent);
+    const monsters = [...modal.querySelectorAll(".hd-card")].map((card) => {
+      const stats = Object.fromEntries([...card.querySelectorAll(".hd-card-stat")].map((row) => [
+        core.normalizeLookup(row.querySelector(".muted")?.textContent),
+        core.numberFromPtBr(row.querySelector("b")?.textContent)
+      ]));
+      return { name: core.clean(card.querySelector(".hd-card-name")?.textContent), xp: stats.exp, hp: stats.hp };
+    }).filter((monster) => monster.name && Number.isFinite(monster.xp) && monster.xp > 0);
+    return name && monsters.length ? { name, monsters } : null;
+  }
+
+  function captureHuntXpDetails(level = null) {
+    const reading = readHuntXpDetails();
+    if (!reading) return false;
+    const key = core.normalizeLookup(reading.name);
+    const previous = huntXpLive[key];
+    const listedRow = [...document.querySelectorAll("#picker-modal .stage-row")].find((row) =>
+      core.normalizeLookup(row.querySelector(".stage-name-line b")?.textContent) === key);
+    level ||= core.numberFromPtBr(listedRow?.querySelector(".stage-lvl")?.textContent);
+    if (previous && JSON.stringify(previous.monsters) === JSON.stringify(reading.monsters)
+      && (!level || previous.level === level)) return true;
+    huntXpLive[key] = { ...reading, level: level || previous?.level || null, capturedAt: Date.now() };
+    if (huntXpSaveTimer) clearTimeout(huntXpSaveTimer);
+    huntXpSaveTimer = setTimeout(() => ext.storage.local.set({ bjHuntXpLive: huntXpLive }).catch(() => {}), 400);
+    if (settings.activeView === "theory") renderTheoreticalHunts(true);
+    return true;
+  }
+
+  async function scanHuntXpDetails() {
+    if (huntXpScanBusy || refreshBusy || automationBusy || bossRun.running || bossRun.inFight || huntScanBusy
+      || isVisible(document.querySelector("#hunt-details-modal"))) {
+      huntXpScanMessage = "Outra ação está em andamento; tente novamente em instantes.";
+      renderTheoreticalHunts(true);
+      return;
+    }
+    huntXpScanBusy = true;
+    refreshBusy = true;
+    const button = host.querySelector("#bj-theory-refresh");
+    button.disabled = true;
+    let openedHere = false;
+    let originalSearch = "";
+    let originalLean = "";
+    let originalCategory = "";
+    let originalLimited = "";
+    let success = 0;
+    let total = 0;
+    try {
+      openedHere = !isVisible(document.querySelector("#picker-modal .pick-search"));
+      const picker = await openHuntPicker();
+      originalSearch = picker.querySelector(".pick-search")?.value || "";
+      originalLean = core.clean([...picker.querySelectorAll(".pick-leanbtn.on")]
+        .find((element) => /^(todas|exp|loot)$/i.test(core.clean(element.textContent)))?.textContent);
+      originalCategory = core.clean(picker.querySelector(".sp-cat.on")?.textContent);
+      originalLimited = picker.querySelector(".pick-leanbtn.done.on") ? "done"
+        : picker.querySelector(".pick-leanbtn.todo.on") ? "todo" : "";
+      const allLean = [...picker.querySelectorAll(".pick-leanbtn")]
+        .find((element) => core.normalizeLookup(element.textContent) === "todas");
+      if (allLean && !allLean.classList.contains("on")) allLean.click();
+      for (const toggle of picker.querySelectorAll(".pick-leanbtn.done.on, .pick-leanbtn.todo.on")) toggle.click();
+      const allLevels = picker.querySelector(".sp-cat");
+      if (allLevels && !allLevels.classList.contains("on")) allLevels.click();
+      const rows = await filterHuntRows("");
+      const names = [...new Set(rows.map((row) => core.clean(row.querySelector(".stage-name-line b")?.textContent)).filter(Boolean))];
+      total = names.length;
+      for (const name of names) {
+        if (disposed || !huntXpScanBusy) break;
+        huntXpScanMessage = `Lendo Detalhes: ${success}/${total} · ${name}`;
+        renderTheoreticalHunts(true);
+        try {
+          await openHuntPicker();
+          const matching = await filterHuntRows(name);
+          let row = matching.find((candidate) => core.normalizeLookup(candidate.querySelector(".stage-name-line b")?.textContent) === core.normalizeLookup(name));
+          if (!row) continue;
+          const level = core.numberFromPtBr(row.querySelector(".stage-lvl")?.textContent);
+          if (!row.classList.contains("expanded")) {
+            row.click();
+            await delay(60);
+            row = [...document.querySelectorAll("#picker-modal .stage-row")].find((candidate) =>
+              core.normalizeLookup(candidate.querySelector(".stage-name-line b")?.textContent) === core.normalizeLookup(name));
+          }
+          const details = row?.querySelector(".stage-details");
+          if (!isVisible(details)) continue;
+          details.click();
+          const card = await waitForElement("#hunt-details-modal:not(.hidden) .hd-card", 2500);
+          if (card && core.normalizeLookup(document.querySelector("#hunt-details-body .hd-head")?.textContent) === core.normalizeLookup(name)
+            && captureHuntXpDetails(level)) success += 1;
+          const close = document.querySelector("#hunt-details-modal-close");
+          if (isVisible(close)) close.click();
+          if (success > 0 && success % 10 === 0) await ext.storage.local.set({ bjHuntXpLive: huntXpLive });
+        } catch (_error) {
+          const close = document.querySelector("#hunt-details-modal-close");
+          if (isVisible(close)) close.click();
+        }
+      }
+      huntXpScanMessage = `${success}/${total} hunts conferidas nos Detalhes do jogo.`;
+    } catch (error) {
+      huntXpScanMessage = `Leitura parcial: ${error.message || error}`;
+    } finally {
+      if (!disposed) {
+        const close = document.querySelector("#hunt-details-modal-close");
+        if (isVisible(close)) close.click();
+        const picker = document.querySelector("#picker-modal");
+        if (isVisible(picker)) {
+          const lean = [...picker.querySelectorAll(".pick-leanbtn")].find((element) =>
+            core.clean(element.textContent) === originalLean);
+          if (lean && !lean.classList.contains("on")) lean.click();
+          const category = [...picker.querySelectorAll(".sp-cat")].find((element) =>
+            core.clean(element.textContent) === originalCategory);
+          if (category && !category.classList.contains("on")) category.click();
+          if (originalLimited) {
+            const limited = picker.querySelector(`.pick-leanbtn.${originalLimited}`);
+            if (limited && !limited.classList.contains("on")) limited.click();
+          }
+          const search = picker.querySelector(".pick-search");
+          if (search) setSearchValue(search, originalSearch);
+          if (openedHere) closeHuntPicker();
+        }
+      }
+      await ext.storage.local.set({ bjHuntXpLive: huntXpLive }).catch(() => {});
+      refreshBusy = false;
+      huntXpScanBusy = false;
+      button.disabled = false;
+      if (!disposed) renderTheoreticalHunts(true);
     }
   }
 
@@ -2425,6 +2576,51 @@
       <div class="bj-run-row"><span><b>${escapeHtml(run.huntName)}</b><small>${new Date(run.completedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span><span>${formatElapsed(run.durationSeconds)}</span><span><b>${formatNumber(run.xpGain)}</b><small>${formatNumber(Math.round(runXpPerHour(run)))} XP/h</small></span><span>${formatNumber(run.loot)}</span><span>${formatNumber(run.balance)}</span><button type="button" class="bj-delete-run" data-action="delete-hunt-run" data-run-id="${escapeHtml(run.id)}" title="Excluir esta medição">×</button></div>`).join("")}</div>` : `<div class="bj-empty-state">As últimas 20 waves aparecerão aqui.</div>`;
   }
 
+  function theoreticalHuntEntries() {
+    const stages = new Map((huntXpCatalog.stages || []).map((stage) => [core.normalizeLookup(stage.name), stage]));
+    for (const [key, live] of Object.entries(huntXpLive)) {
+      if (!live || !Array.isArray(live.monsters) || !live.monsters.length) continue;
+      const previous = stages.get(key) || {};
+      stages.set(key, { ...previous, ...live, level: live.level || previous.level || null });
+    }
+    for (const name of huntOptions) {
+      const key = core.normalizeLookup(name);
+      if (key && !stages.has(key)) stages.set(key, { name, level: null, monsters: [] });
+    }
+    return [...stages.values()];
+  }
+
+  function renderTheoreticalHunts(force = false) {
+    const members = readPartyCharacters();
+    const levelSelect = host.querySelector("#bj-theory-character");
+    const chosen = settings.theoryCharacter || "party";
+    const levelChoices = `<option value="party">Party · menor nível</option>${members.map((member) =>
+      `<option value="${escapeHtml(member.name)}">${escapeHtml(member.name)} · Nv. ${member.level}</option>`).join("")}`;
+    if (levelSelect.dataset.options !== levelChoices) {
+      levelSelect.innerHTML = levelChoices;
+      levelSelect.dataset.options = levelChoices;
+    }
+    levelSelect.value = members.some((member) => member.name === chosen) ? chosen : "party";
+    const selectedLevel = levelSelect.value === "party"
+      ? members.length ? Math.min(...members.map((member) => member.level)) : null
+      : members.find((member) => member.name === levelSelect.value)?.level || null;
+    const query = core.normalizeLookup(host.querySelector("#bj-theory-search").value);
+    const stages = core.rankTheoreticalHunts(theoreticalHuntEntries(), selectedLevel)
+      .filter((stage) => !query || core.normalizeLookup(stage.name).includes(query));
+    const signature = JSON.stringify([members.map((member) => [member.name, member.level]), levelSelect.value,
+      query, stages.map((stage) => [stage.name, stage.averageXp, stage.level, stage.capturedAt]), huntXpScanMessage]);
+    if (!force && signature === lastTheoreticalRender) return;
+    lastTheoreticalRender = signature;
+    const updated = Object.keys(huntXpLive).length;
+    host.querySelector("#bj-theory-status").textContent = `${stages.length} hunts · ${updated} lidas nos Detalhes do jogo · ${huntXpScanMessage}`;
+    host.querySelector("#bj-theory-list").innerHTML = stages.length ? stages.map((stage, index) => {
+      const levelLabel = stage.level == null ? "Nível não informado" : stage.aboveLevel == null
+        ? `Nv. recomendado ${stage.level}` : stage.aboveLevel ? `Acima do nível · ${stage.level}` : `No nível · ${stage.level}`;
+      return `<details class="bj-theory-card"><summary><span class="bj-theory-rank">${index + 1}</span><span class="bj-theory-name"><strong>${escapeHtml(stage.name)}</strong><small>${escapeHtml(levelLabel)} · ${stage.monsters.length} monstros${stage.capturedAt ? " · lido no jogo" : ""}</small></span><b>${stage.averageXp == null ? "XP pendente" : `${formatNumber(Math.round(stage.averageXp))} XP/mob`}</b></summary>
+        <div class="bj-theory-monsters">${stage.monsters.length ? stage.monsters.map((monster) => `<div><span>${escapeHtml(monster.name)}</span><b>${formatNumber(monster.xp)} XP</b></div>`).join("") : "Abra Detalhes no jogo para ler a XP desta hunt."}</div></details>`;
+    }).join("") : '<div class="bj-empty-state">Nenhuma hunt encontrada.</div>';
+  }
+
   function lookupKey(value) {
     return core.normalizeLookup(value).split(" ").map((word) => word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word).join(" ");
   }
@@ -2764,6 +2960,8 @@
     }
     if (action === "view-dashboard") await switchView("dashboard", true);
     if (action === "view-hunts") await switchView("hunts", true);
+    if (action === "view-theory") await switchView("theory", true);
+    if (action === "scan-hunt-xp") { scanHuntXpDetails().catch(() => {}); return; }
     if (action === "view-training") await switchView("training", true);
     if (action === "refresh-houses") {
       try { await scanHouseInvites(true); }
@@ -2851,12 +3049,20 @@
       renderSets();
       return;
     }
+    if (event.target.id === "bj-theory-character") {
+      settings.theoryCharacter = event.target.value;
+      renderTheoreticalHunts(true);
+      await ext.storage.local.set({ bjSettings: settings });
+      return;
+    }
     if (event.target.id !== "bj-hunt-select") return;
     settings.huntName = event.target.value || "Cobras";
     await ext.storage.local.set({ bjSettings: settings });
     renderAutomationStatus();
     setAutoState("success", `Após o treino, a party voltará para ${settings.huntName}.`);
   });
+
+  host.querySelector("#bj-theory-search").addEventListener("input", () => renderTheoreticalHunts(true));
 
   function enableDrag() {
     const header = host.querySelector(".bj-header");
@@ -2879,11 +3085,12 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjDailyXp: null, bjBossDay: null }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjDailyXp, bjBossDay }) => {
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjDailyXp: null, bjBossDay: null, bjHuntXpLive: {} }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjDailyXp, bjBossDay, bjHuntXpLive }) => {
     settings = { ...defaults, ...bjSettings, codexAutoEnabled: false };
     if (bjSettings?.codexAutoEnabled) ext.storage.local.set({ bjSettings: settings }).catch(() => {});
     profiles = { ...profiles, ...(bjProfiles || {}) };
     huntOptions = Array.isArray(bjHuntOptions) && bjHuntOptions.length ? bjHuntOptions : ["Cobras"];
+    huntXpLive = { ...(bjHuntXpLive && typeof bjHuntXpLive === "object" ? bjHuntXpLive : {}), ...huntXpLive };
     huntRuns = Array.isArray(bjHuntRuns) ? bjHuntRuns : [];
     huntArchive = bjHuntArchive && typeof bjHuntArchive === "object" ? bjHuntArchive : {};
     const today = core.brazilDayKey(Date.now());
@@ -2915,6 +3122,7 @@
     if (area === "local" && changes.bjHuntOptions) {
       huntOptions = changes.bjHuntOptions.newValue || ["Cobras"];
       renderHuntOptions();
+      if (settings.activeView === "theory") renderTheoreticalHunts(true);
     }
     if (area === "local" && changes.bjHuntRuns && changes.bjHuntWriter?.newValue !== huntWriterId) {
       huntRuns = Array.isArray(changes.bjHuntRuns.newValue) ? changes.bjHuntRuns.newValue : [];
@@ -2941,6 +3149,12 @@
       subtree: true, childList: true, characterData: true, attributes: true
     });
   }
+  const huntDetailsModal = document.querySelector("#hunt-details-modal");
+  if (huntDetailsModal) {
+    huntXpDetailsObserver = new MutationObserver(() => captureHuntXpDetails());
+    huntXpDetailsObserver.observe(huntDetailsModal, { subtree: true, childList: true, characterData: true, attributes: true });
+    captureHuntXpDetails();
+  }
   heartbeatTimer = setInterval(sendHeartbeat, 15000);
   window.addEventListener("online", sendHeartbeat);
   document.addEventListener("baiak-jarvis:dispose", () => {
@@ -2949,6 +3163,8 @@
     if (timer) clearInterval(timer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     gameObserver?.disconnect();
+    huntXpDetailsObserver?.disconnect();
+    if (huntXpSaveTimer) clearTimeout(huntXpSaveTimer);
     window.removeEventListener("online", sendHeartbeat);
   }, { once: true });
   sendHeartbeat();

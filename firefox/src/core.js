@@ -26,6 +26,23 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function rankTheoreticalHunts(stages, characterLevel) {
+    const level = Number.isFinite(characterLevel) && characterLevel > 0 ? characterLevel : null;
+    return (Array.isArray(stages) ? stages : []).map((stage) => {
+      const monsters = (Array.isArray(stage?.monsters) ? stage.monsters : [])
+        .filter((monster) => monster && Number.isFinite(monster.xp) && monster.xp > 0);
+      const requiredLevel = Number.isFinite(stage?.level) && stage.level > 0 ? stage.level : null;
+      return {
+        ...stage,
+        monsters,
+        level: requiredLevel,
+        averageXp: monsters.length ? monsters.reduce((sum, monster) => sum + monster.xp, 0) / monsters.length : null,
+        aboveLevel: level == null || requiredLevel == null ? null : requiredLevel > level
+      };
+    }).sort((a, b) => (b.averageXp ?? -1) - (a.averageXp ?? -1)
+      || a.name.localeCompare(b.name, "pt-BR"));
+  }
+
   function percentFromPtBr(value) {
     if (value == null || value === "") return null;
     let normalized = String(value).replace(/[%+\s]/g, "");
@@ -931,6 +948,7 @@
     numberFromPtBr,
     percentFromPtBr,
     relativeDifference,
+    rankTheoreticalHunts,
     parseVitalBar,
     parseSnapshot,
     activePartyCharacters,
