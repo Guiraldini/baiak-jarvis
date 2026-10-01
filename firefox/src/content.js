@@ -76,6 +76,7 @@
   let huntRuns = [];
   let huntArchive = {};
   let dailyXp = { day: core.brazilDayKey(Date.now()), xp: 0, waves: 0, partial: false };
+  let dailyXpSaveTimer = null;
   const huntWriterId = `${Date.now()}-${Math.random()}`;
   const persistHuntState = core.createLatestWriteQueue(() => ({
     bjHuntRuns: huntRuns,
@@ -107,7 +108,7 @@
   const bossRun = {
     running: false, inFight: false, loopBusy: false, status: "idle", current: null,
     message: "Pronto para enfrentar os chefes favoritos disponíveis.",
-    attempted: [], results: [], wins: 0, charges: null, maxCharges: null,
+    attempted: [], unavailable: [], results: [], wins: 0, charges: null, maxCharges: null,
     phase: "idle", previousWins: null, previousCharges: null, startedAt: 0,
     fightStartedAt: 0, fightEndedAt: 0, xpBefore: {}, damageBaseline: {}, damagePeak: {}, damageReset: {}
   };
@@ -215,7 +216,7 @@
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-bosses">
         <div class="bj-boss-view">
-          <div class="bj-boss-heading"><strong>RUN DE CHEFES FAVORITOS</strong><small>Usa apenas os chefes marcados com ★ que estiverem disponíveis no jogo.</small></div>
+          <div class="bj-boss-heading"><strong>RUN DE CHEFES FAVORITOS</strong><small>O Jarvis prepara cada favorito; clique em Enfrentar no card do jogo para iniciar a luta.</small></div>
           <div class="bj-boss-status" id="bj-boss-status" data-status="idle">
             <span class="bj-boss-dot"></span><strong id="bj-boss-state">Pronto</strong>
             <span id="bj-boss-message">Pronto para enfrentar os chefes favoritos disponíveis.</span>
@@ -1094,7 +1095,7 @@
     if (!panel) return;
     panel.dataset.status = bossRun.status;
     host.querySelector("#bj-boss-state").textContent = ({
-      idle: "Pronto", running: "Em execução", stopping: "Parando", complete: "Concluída",
+      idle: "Pronto", running: bossRun.phase === "awaiting-user" ? "Aguardando seu clique" : "Em execução", stopping: "Parando", complete: "Concluída",
       paused: "Parada", error: "Atenção"
     })[bossRun.status] || "Pronto";
     host.querySelector("#bj-boss-message").textContent = bossRun.message;
@@ -1145,11 +1146,11 @@
 
   function persistBossRun() {
     try {
-      const { running, status, message, current, phase, attempted, results, wins, charges, maxCharges,
+      const { running, status, message, current, phase, attempted, unavailable, results, wins, charges, maxCharges,
         previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
         damageBaseline, damagePeak, damageReset } = bossRun;
       sessionStorage.setItem(BOSS_RUN_SESSION_KEY, JSON.stringify({
-        running, status, message, current, phase, attempted, results, wins, charges, maxCharges,
+        running, status, message, current, phase, attempted, unavailable, results, wins, charges, maxCharges,
         previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
         damageBaseline, damagePeak, damageReset, updatedAt: Date.now()
       }));
@@ -1161,13 +1162,14 @@
       const saved = JSON.parse(sessionStorage.getItem(BOSS_RUN_SESSION_KEY) || "null");
       if (!saved || !Number.isFinite(saved.updatedAt) || Date.now() - saved.updatedAt > 24 * 60 * 60 * 1000
         || !Array.isArray(saved.attempted) || !Array.isArray(saved.results)
-        || !["choosing", "entering", "fighting", "confirming"].includes(saved.phase)) {
+        || !["choosing", "awaiting-user", "entering", "fighting", "confirming"].includes(saved.phase)) {
         sessionStorage.removeItem(BOSS_RUN_SESSION_KEY);
         return false;
       }
       Object.assign(bossRun, saved, {
         loopBusy: Boolean(saved.running),
         inFight: Boolean(saved.running && ["entering", "fighting"].includes(saved.phase)),
+        unavailable: Array.isArray(saved.unavailable) ? saved.unavailable : [],
         damageReset: saved.damageReset || {}
       });
       if (!saved.running) {
@@ -1236,6 +1238,10 @@
   }
 
   async function openBossPicker() {
+    const partyManage = document.querySelector("#party-manage");
+    if (partyManage?.disabled && /\b(boss|chefe)\b/.test(core.normalizeLookup(partyManage.title))) {
+      throw new Error("Há uma luta de chefe em andamento. Aguarde o fim antes de abrir outra run.");
+    }
     if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
       throw new Error("Há uma escolha de dificuldade aberta. Conclua ou feche essa escolha no jogo antes de iniciar a run.");
     }
@@ -1280,7 +1286,7 @@
   }
 
   function readBossCharges(modal) {
-    const text = modal.querySelector(".boss-global:not(.boss-pass)")?.textContent || "";
+    const text = modal?.querySelector(".boss-global:not(.boss-pass)")?.textContent || "";
     const match = text.match(/(\d+)\s*\/\s*(\d+)/);
     return match ? { left: Number(match[1]), max: Number(match[2]) } : null;
   }
@@ -1293,7 +1299,8 @@
       return {
         name,
         favorite: Boolean(cell.querySelector(".boss-cell-fav.on")),
-        ready: Boolean(cell.querySelector(".boss-cell-go:not(:disabled)")),
+        ready: !cell.classList.contains("locked") && !cell.classList.contains("active")
+          && Boolean(cell.querySelector(".boss-cell-go:not(:disabled)")),
         active: cell.classList.contains("active"),
         cooldown: cell.classList.contains("locked"),
         wins: wins ? Number(wins[1]) : null
@@ -1303,7 +1310,7 @@
 
   function findBossCell(modal, name) {
     const wanted = core.normalizeLookup(name);
-    const cells = [...modal.querySelectorAll(".boss-pane-list .boss-cardgrid .boss-cell")]
+    const cells = [...(modal?.querySelectorAll(".boss-pane-list .boss-cardgrid .boss-cell") || [])]
       .filter((cell) => core.normalizeLookup(cell.querySelector(".boss-cell-name")?.textContent) === wanted);
     return cells.length === 1 ? cells[0] : null;
   }
@@ -1312,16 +1319,17 @@
     let cards = [];
     let charges = null;
     let decision = { type: "stop", reason: "no-favorites" };
-    const maxAttempts = bossRun.attempted.length ? 120 : 24;
+    const maxAttempts = bossRun.attempted.length || bossRun.unavailable.length ? 120 : 24;
     for (let attempt = 0; attempt < maxAttempts && bossRun.running; attempt += 1) {
       cards = readFavoriteBossCards(modal);
       charges = readBossCharges(modal);
-      decision = core.bossRunDecision(cards, bossRun.attempted, charges?.left);
+      decision = core.bossRunDecision(cards, [...bossRun.attempted, ...bossRun.unavailable], charges?.left);
       if (decision.type === "fight" || decision.reason === "ambiguous-boss" || decision.reason === "no-charges") break;
       // O jogo pode remontar a grade após uma vitória. Reabra um favorito
       // elegível para forçar a atualização do botão Enfrentar.
       const next = cards.find((card) => card.favorite && !card.active && !card.cooldown
-        && !bossRun.attempted.some((name) => core.normalizeLookup(name) === core.normalizeLookup(card.name)));
+        && ![...bossRun.attempted, ...bossRun.unavailable]
+          .some((name) => core.normalizeLookup(name) === core.normalizeLookup(card.name)));
       if (next) {
         const cell = findBossCell(modal, next.name);
         if (cell && !cell.classList.contains("expanded")) cell.click();
@@ -1338,8 +1346,12 @@
     let readySince = 0;
     let expandedCell = null;
     let expandedSince = 0;
+    let unavailableReads = 0;
     for (let attempt = 0; attempt < 40 && bossRun.running; attempt += 1) {
       const cell = findBossCell(modal, name);
+      unavailableReads = cell?.classList.contains("locked") || cell?.classList.contains("active")
+        ? unavailableReads + 1 : 0;
+      if (unavailableReads >= 4) return null;
       if (cell && !cell.classList.contains("expanded")) cell.click();
       const button = cell?.querySelector(".boss-cell-go");
       if (cell?.isConnected && cell.classList.contains("expanded")) {
@@ -1364,31 +1376,53 @@
       await delay(250);
     }
     if (!bossRun.running) return null;
-    throw new Error(`O botão Enfrentar de ${name} não ficou disponível no jogo.`);
+    return null;
   }
 
-  async function waitForBossEntry(name, previousCharges, modal) {
+  function markBossUnavailable(name) {
+    if (!bossRun.unavailable.some((entry) => core.normalizeLookup(entry) === core.normalizeLookup(name))) {
+      bossRun.unavailable.push(name);
+    }
+    setBossRunState("running", `${name} ficou indisponível no jogo. Procurando outro favorito…`);
+  }
+
+  function clearBossButtonHighlight() {
+    document.querySelectorAll("#boss-modal .boss-cell-go.bj-boss-awaiting-click")
+      .forEach((button) => button.classList.remove("bj-boss-awaiting-click"));
+  }
+
+  async function waitForHumanBossEntry(name, previousCharges, modal) {
     const started = Date.now();
-    let retried = false;
-    while (Date.now() - started < 32000) {
+    let entryRequestedAt = 0;
+    while (bossRun.running && !disposed && Date.now() - started < 10 * 60 * 1000) {
       sampleBossDamage();
-      if (bossFightVisible(name)) return;
+      if (bossFightVisible(name)) {
+        bossRun.fightStartedAt = entryRequestedAt || Date.now();
+        clearBossButtonHighlight();
+        return true;
+      }
       if (isVisible(document.querySelector("#confirm-modal .bdiff"))) {
         throw new Error(`${name} exige escolher a dificuldade no jogo. A run parou antes de gastar uma carga.`);
       }
-      if (readBossCharges(modal)?.left < previousCharges) return;
       if (gameFailureDetected() || !navigator.onLine) throw new Error("O jogo desconectou antes de confirmar a entrada no chefe.");
-      if (!retried && Date.now() - started >= 12000 && isVisible(modal)
-        && readBossCharges(modal)?.left === previousCharges) {
-        retried = true;
-        setBossRunState("running", `Aguardando ${name}; verificando o botão Enfrentar novamente…`);
-        const button = await waitForBossButton(modal, name);
-        if (button?.isConnected && !button.disabled && isVisible(button)
-          && readBossCharges(modal)?.left === previousCharges && !bossFightVisible(name)) button.click();
+      if (!entryRequestedAt && (readBossCharges(modal)?.left < previousCharges || !isVisible(modal))) {
+        entryRequestedAt = Date.now();
+        setBossRunState("running", `Confirmando a entrada em ${name}…`);
+      }
+      if (entryRequestedAt && Date.now() - entryRequestedAt > 32000) {
+        throw new Error(`O jogo não confirmou a entrada em ${name}. Nenhum outro chefe será iniciado.`);
+      }
+      const cell = findBossCell(modal, name);
+      if (!entryRequestedAt && cell && !cell.classList.contains("expanded") && isVisible(modal)) cell.click();
+      const button = cell?.querySelector(".boss-cell-go");
+      if (!entryRequestedAt && button?.isConnected && !button.disabled && isVisible(button)) {
+        button.classList.add("bj-boss-awaiting-click");
       }
       await delay(250);
     }
-    throw new Error(`O jogo não confirmou a entrada em ${name}. Se apareceu uma escolha de dificuldade, faça essa luta manualmente.`);
+    clearBossButtonHighlight();
+    if (!bossRun.running || disposed) return false;
+    throw new Error(`Tempo de espera pelo seu clique em Enfrentar para ${name} esgotado. A run foi pausada.`);
   }
 
   async function waitForBossExit(name) {
@@ -1499,11 +1533,39 @@
       for (let index = 0; index < 100 && bossRun.running; index += 1) {
         if (automationBusy || refreshBusy) throw new Error("Outra ação do Jarvis está em andamento. Tente iniciar a run novamente.");
         if (bossRun.current) {
+          if (bossRun.phase === "awaiting-user") {
+            let modal = document.querySelector("#boss-modal");
+            if (!bossFightVisible(bossRun.current) && !isVisible(modal)
+              && !(readBossCharges(modal)?.left < bossRun.previousCharges)) {
+              await delay(1500);
+              if (!bossRun.running) break;
+              if (!bossFightVisible(bossRun.current)) {
+                modal = await openBossPicker();
+                const button = await waitForBossButton(modal, bossRun.current);
+                if (!bossRun.running) break;
+                if (!button) {
+                  const unavailableName = bossRun.current;
+                  bossRun.current = null;
+                  bossRun.phase = "choosing";
+                  markBossUnavailable(unavailableName);
+                  continue;
+                }
+                clearBossButtonHighlight();
+                button.classList.add("bj-boss-awaiting-click");
+                setBossRunState("running", `Clique em Enfrentar no card destacado de ${bossRun.current} no jogo.`);
+              }
+            }
+            if (!await waitForHumanBossEntry(bossRun.current, bossRun.previousCharges, modal)) break;
+            recordBossAttempt(bossRun.current);
+            bossRun.phase = "fighting";
+            bossRun.inFight = true;
+          }
           await finishCurrentBoss();
           if (bossRun.running) await delay(1800);
           continue;
         }
         const xpBefore = await readBossPartyXp().catch(() => ({}));
+        if (!bossRun.running) break;
         const modal = await openBossPicker();
         if (!bossRun.running) break;
         const { cards, charges, decision } = await chooseFavoriteBoss(modal);
@@ -1528,31 +1590,36 @@
           break;
         }
         const name = decision.name;
-        bossRun.current = name;
-        bossRun.phase = "choosing";
         setBossRunState("running", `Abrindo ${name}…`);
         let button = await waitForBossButton(modal, name);
         if (!bossRun.running) break;
-        if (!button.isConnected || button.disabled || !isVisible(button)
+        if (!button?.isConnected || button.disabled || !isVisible(button)
           || findBossCell(modal, name)?.querySelector(".boss-cell-go") !== button) {
           button = await waitForBossButton(modal, name);
         }
+        if (!bossRun.running) break;
+        if (!button) {
+          markBossUnavailable(name);
+          continue;
+        }
         const previous = cards.find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
-        bossRun.inFight = true;
-        bossRun.phase = "entering";
+        bossRun.current = name;
+        bossRun.phase = "awaiting-user";
         bossRun.previousWins = previous?.wins ?? null;
         bossRun.previousCharges = charges.left;
-        bossRun.fightStartedAt = Date.now();
+        bossRun.fightStartedAt = 0;
         bossRun.fightEndedAt = 0;
         bossRun.xpBefore = xpBefore;
         bossRun.damageBaseline = readBossDamageTotals();
         bossRun.damagePeak = {};
         bossRun.damageReset = {};
-        setBossRunState("running", `Enfrentando ${name}…`);
-        button.click();
-        await waitForBossEntry(name, charges.left, modal);
+        clearBossButtonHighlight();
+        button.classList.add("bj-boss-awaiting-click");
+        setBossRunState("running", `Clique em Enfrentar no card destacado de ${name} no jogo.`);
+        if (!await waitForHumanBossEntry(name, charges.left, modal)) break;
         recordBossAttempt(name);
         bossRun.phase = "fighting";
+        bossRun.inFight = true;
         setBossRunState("running", `Aguardando o fim da luta com ${name}…`);
         await finishCurrentBoss();
         if (bossRun.running) await delay(1800);
@@ -1562,6 +1629,7 @@
         setBossRunState("error", "A run atingiu o limite de 100 tentativas e parou.");
       }
     } catch (error) {
+      clearBossButtonHighlight();
       bossRun.running = false;
       const lastResult = bossRun.results.findLast((item) => item.outcome === "Em andamento…");
       if (lastResult) lastResult.outcome = "Resultado não confirmado";
@@ -1574,6 +1642,7 @@
   function toggleBossRun() {
     if (bossRun.running) {
       bossRun.running = false;
+      clearBossButtonHighlight();
       setBossRunState(bossRun.inFight ? "stopping" : "paused", bossRun.inFight
         ? "Parando após a luta atual. Nenhum outro chefe será iniciado."
         : "Run parada. Nenhum outro chefe será iniciado.");
@@ -1591,7 +1660,7 @@
     Object.assign(bossRun, {
       running: true, inFight: false, status: "running", current: null,
       loopBusy: true,
-      message: "Lendo os chefes favoritos e as cargas…", attempted: [], results: [],
+      message: "Lendo os chefes favoritos e as cargas…", attempted: [], unavailable: [], results: [],
       wins: 0, charges: null, maxCharges: null, phase: "choosing",
       previousWins: null, previousCharges: null, startedAt: Date.now(),
       fightStartedAt: 0, fightEndedAt: 0, xpBefore: {}, damageBaseline: {}, damagePeak: {}, damageReset: {}
@@ -2317,6 +2386,7 @@
       waveNumber: currentIndex >= 0 ? currentIndex + 1 : null,
       waveCount: dots.length || null,
       xpGain,
+      sessionSeconds: core.elapsedToSeconds(core.clean(document.querySelector("#an-session")?.textContent)),
       kills: readAnalyzerNumber("#an-kills"),
       loot: readAnalyzerNumber("#an-loot"),
       supplies: readAnalyzerNumber("#an-supplies"),
@@ -2406,6 +2476,14 @@
     return true;
   }
 
+  function saveDailyXpSoon() {
+    if (dailyXpSaveTimer) return;
+    dailyXpSaveTimer = setTimeout(() => {
+      dailyXpSaveTimer = null;
+      if (!disposed) persistHuntState().catch(() => {});
+    }, 5000);
+  }
+
   function saveCompletedHunt(telemetry, durationSeconds) {
     if (!huntTracker?.eligible || huntTracker.completed || durationSeconds < 10) return;
     const xpGain = metricDelta(telemetry.xpGain, huntTracker.startXp);
@@ -2427,7 +2505,8 @@
     const allRuns = [...huntRuns, record];
     huntArchive = core.archiveHuntRuns(huntArchive, allRuns.slice(0, Math.max(0, allRuns.length - 200)));
     huntRuns = allRuns.slice(-200);
-    dailyXp = core.addDailyHuntRun(dailyXp, record);
+    rollDailyXp(completedAt);
+    dailyXp = { ...dailyXp, waves: dailyXp.waves + 1 };
     huntMonitorMessage = `${record.huntName}: wave concluída em ${formatElapsed(record.durationSeconds)}, com ${formatNumber(record.xpGain)} XP.`;
     persistHuntState().catch(() => {});
     if (huntTracker.partyXpStartPromise) {
@@ -2438,6 +2517,10 @@
 
   function monitorHuntRun(snapshot) {
     const telemetry = readHuntTelemetry(snapshot);
+    const previousDailyXp = dailyXp;
+    dailyXp = core.observeDailyHuntXp(dailyXp, telemetry, telemetry.capturedAt);
+    if (dailyXp.xp !== previousDailyXp.xp || dailyXp.day !== previousDailyXp.day
+      || dailyXp.analyzerXp !== previousDailyXp.analyzerXp) saveDailyXpSoon();
     if (!telemetry.valid) {
       huntTracker = null;
       huntMonitorMessage = telemetry.invalidReason === "boss"
@@ -2553,7 +2636,7 @@
     host.querySelector("#bj-hunt-summary").innerHTML = `
       <article><small>Melhor rendimento</small><strong>${best ? escapeHtml(best.huntName) : "—"}</strong><span>${best ? `${formatNumber(Math.round(best.xpPerHour))} XP/h` : "Aguardando waves"}</span></article>
       <article><small>Hunts comparadas</small><strong>${summaries.length}</strong><span>${totalWaves} waves completas</span></article>
-      <article><small>XP de hoje</small><strong>${formatNumber(dailyXp.xp)}</strong><span>${dailyXp.partial ? "Parcial: histórico anterior incompleto" : `${dailyXp.waves} ${dailyXp.waves === 1 ? "wave" : "waves"} hoje`} · zera 00h (Brasília)</span></article>`;
+      <article><small>XP de hoje</small><strong>${formatNumber(dailyXp.xp)}</strong><span>Hunt Analyzer · ${dailyXp.waves} ${dailyXp.waves === 1 ? "wave registrada" : "waves registradas"} · zera 00h (Brasília)</span></article>`;
 
     const comparison = host.querySelector("#bj-hunt-comparison");
     if (!summaries.length) {
@@ -2989,7 +3072,7 @@
       rollDailyXp();
       if (removed && Number.isFinite(removed.completedAt) && Number.isFinite(removed.xpGain)
         && core.brazilDayKey(removed.completedAt) === dailyXp.day) {
-        dailyXp = { ...dailyXp, xp: Math.max(0, dailyXp.xp - removed.xpGain), waves: Math.max(0, dailyXp.waves - 1) };
+        dailyXp = { ...dailyXp, waves: Math.max(0, dailyXp.waves - 1) };
       }
       await persistHuntState();
       renderHuntHistory();
@@ -3171,6 +3254,7 @@
     gameObserver?.disconnect();
     huntXpDetailsObserver?.disconnect();
     if (huntXpSaveTimer) clearTimeout(huntXpSaveTimer);
+    if (dailyXpSaveTimer) clearTimeout(dailyXpSaveTimer);
     window.removeEventListener("online", sendHeartbeat);
   }, { once: true });
   sendHeartbeat();

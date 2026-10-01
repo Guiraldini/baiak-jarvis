@@ -240,6 +240,25 @@
     return { ...current, xp: current.xp + run.xpGain, waves: current.waves + 1 };
   }
 
+  function observeDailyHuntXp(state, telemetry, timestamp) {
+    const day = brazilDayKey(timestamp);
+    const current = state?.day === day ? { ...state } : { day, xp: 0, waves: 0, partial: false };
+    if (!telemetry?.valid || telemetry.bossMode || !Number.isFinite(telemetry.xpGain)) {
+      current.analyzerXp = null;
+      return current;
+    }
+    if (!Number.isFinite(current.analyzerXp) && current.xp === 0 && current.waves === 0
+      && Number.isFinite(telemetry.sessionSeconds) && telemetry.sessionSeconds >= 0
+      && brazilDayKey(timestamp - telemetry.sessionSeconds * 1000) === day) {
+      current.xp = telemetry.xpGain;
+    }
+    if (Number.isFinite(current.analyzerXp) && telemetry.xpGain >= current.analyzerXp) {
+      current.xp += telemetry.xpGain - current.analyzerXp;
+    }
+    current.analyzerXp = telemetry.xpGain;
+    return current;
+  }
+
   function createLatestWriteQueue(readState, writeState) {
     let queue = Promise.resolve();
     return () => {
@@ -927,6 +946,7 @@
     addDailyBossResult,
     summarizeBossFight,
     addDailyHuntRun,
+    observeDailyHuntXp,
     createLatestWriteQueue,
     archiveHuntRuns,
     brazilDayKey,

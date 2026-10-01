@@ -2,6 +2,24 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.36
+
+- reabre a lista de chefes e o card selecionado ao retomar uma run que aguardava seu clique;
+- se o botão **Enfrentar** de um favorito ficar indisponível, procura o próximo sem encerrar a run nem contar uma tentativa;
+- impede que o Jarvis abra a lista de chefes enquanto há uma luta em andamento.
+
+## Versão 0.8.35
+
+- prepara e destaca o botão **Enfrentar** do próximo chefe favorito para que você confirme a luta com um clique no jogo;
+- aguarda o jogo confirmar a entrada antes de registrar a tentativa e acompanhar a luta;
+- após cada vitória, abre o próximo favorito e espera a nova confirmação, sem cliques automáticos em **Enfrentar**.
+
+## Versão 0.8.34
+
+- conta a XP diária diretamente pelo ganho do Hunt Analyzer, inclusive durante uma wave e nas trocas automáticas de hunt;
+- recupera a XP já mostrada pelo Analyzer quando a sessão começou depois da meia-noite de Brasília;
+- mantém o registro de waves separado para comparar o rendimento entre hunts.
+
 ## Versão 0.8.33
 
 - respeita a hunt escolhida manualmente: chegar a 54% de stamina enquanto caça não força o retorno à hunt configurada;
@@ -238,7 +256,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.33.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.36.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -249,7 +267,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.33.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.36.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.
@@ -277,4 +295,4 @@ node .\tests\recovery.test.js
 
 Para atualizar o catálogo de missões Codex após uma mudança do jogo, salve o bundle JavaScript público do cliente e execute `node scripts/build_codex_catalog.js caminho-do-bundle.js`.
 
-O rodapé do painel deve mostrar `Jarvis 0.8.33 AUTO · execução local`.
+O rodapé do painel deve mostrar `Jarvis 0.8.36 AUTO · execução local`.

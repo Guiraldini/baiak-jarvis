@@ -395,6 +395,12 @@
 #baiak-jarvis .bj-boss-result-leader { margin-top: 7px; color: #91d9a8; }
 #baiak-jarvis .bj-boss-result-damage { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; }
 
+#boss-modal .boss-cell-go.bj-boss-awaiting-click {
+  outline: 3px solid #f0be4e;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(240,190,78,.2), 0 0 16px rgba(240,190,78,.85);
+}
+
 /* Destaca apenas os itens da Loot Pouch que ainda faltam em alguma missão Codex. */
 #inv-grid > .cell.bj-codex-needed {
   outline: 2px solid #f04f59 !important;
