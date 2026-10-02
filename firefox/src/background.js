@@ -1,6 +1,8 @@
 "use strict";
 
+if (typeof importScripts === "function") importScripts("boss-input.js");
 const ext = globalThis.browser || globalThis.chrome;
+const bossInput = globalThis.BaiakJarvisBossInput?.createController(ext);
 
 const heartbeats = new Map();
 const errorSince = new Map();
@@ -66,6 +68,7 @@ ext.runtime.onStartup.addListener(() => {
 
 ext.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== "bj-watchdog") return;
+  await bossInput?.sweep();
   const tabs = await ext.tabs.query({ url: GAME_MATCHES });
   const now = Date.now();
   for (const tab of tabs) {
@@ -82,7 +85,17 @@ ext.tabs.onRemoved.addListener((tabId) => {
 });
 
 ext.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (/^bj:boss-input-(?:start|status|click|end)$/.test(message?.type || "")) {
+    if (!bossInput) {
+      sendResponse({ ok: false, error: "O modo automático de chefes está disponível no pacote Chrome." });
+      return false;
+    }
+    bossInput.handle(message, _sender).then(sendResponse)
+      .catch((error) => sendResponse({ ok: false, error: error.message || "O Chrome interrompeu o controle da run." }));
+    return true;
+  }
   if (message?.type === "bj:heartbeat" && _sender.tab?.id && GAME_URL.test(_sender.tab.url || "")) {
+    bossInput?.touch(_sender);
     const tabId = _sender.tab.id;
     const now = Date.now();
     heartbeats.set(tabId, now);

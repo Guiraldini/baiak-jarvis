@@ -2,6 +2,17 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.37
+
+- adiciona entrada automática em **Enfrentar** pelo controle de entrada do Chrome: clique em **Iniciar run** e o Jarvis aguarda cada vitória antes de preparar o próximo favorito;
+- confere nome, favorito, disponibilidade, cargas e posição do botão antes de cada entrada; não repete um clique com resultado incerto;
+- a versão Chrome passa a exigir a permissão `debugger`. O controle fica limitado à aba do Baiak que iniciou a run e é desligado ao terminar, parar ou perder contato com a página;
+- o Chrome mostra o aviso de depuração durante a run. Cancelar esse aviso interrompe a sequência; a luta que já começou pode terminar;
+- no Firefox, a confirmação manual em **Enfrentar** permanece;
+- testes locais de sequência e cancelamento aprovados; uma run completa de favoritos foi confirmada pelo usuário no Chrome.
+
+Após atualizar os arquivos, recarregue **Baiak Jarvis AUTO** em `chrome://extensions` e aceite a nova permissão se o Chrome solicitar. O jogo pode continuar aberto.
+
 ## Versão 0.8.36
 
 - reabre a lista de chefes e o card selecionado ao retomar uma run que aguardava seu clique;
@@ -256,7 +267,7 @@ As automações podem ser desligadas separadamente no popup da extensão.
 
 ## Chrome
 
-1. Baixe e extraia `baiak-jarvis-chrome-v0.8.36.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-chrome-v0.8.37.zip` na página de Releases.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação**.
@@ -267,7 +278,7 @@ O código instalável diretamente também está na pasta [`chrome`](./chrome).
 
 ## Firefox
 
-1. Baixe e extraia `baiak-jarvis-firefox-v0.8.36.zip` na página de Releases.
+1. Baixe e extraia `baiak-jarvis-firefox-v0.8.37.zip` na página de Releases.
 2. Abra `about:debugging#/runtime/this-firefox`.
 3. Clique em **Carregar extensão temporária**.
 4. Selecione o `manifest.json` da pasta extraída.

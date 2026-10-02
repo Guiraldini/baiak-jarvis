@@ -4,6 +4,7 @@
   const ext = globalThis.browser || globalThis.chrome;
   if (window.top !== window) return;
   const extensionVersion = ext.runtime.getManifest().version;
+  const canAutomateBossInput = ext.runtime.getManifest().permissions?.includes("debugger") === true;
   const previousHost = document.getElementById("baiak-jarvis");
   if (previousHost?.dataset.bjVersion === extensionVersion) return;
   if (previousHost) {
@@ -107,6 +108,7 @@
   let bossDay = { day: core.brazilDayKey(Date.now()), results: [] };
   const bossRun = {
     running: false, inFight: false, loopBusy: false, status: "idle", current: null,
+    automatic: false, inputToken: null, entryRequestedAt: 0,
     message: "Pronto para enfrentar os chefes favoritos disponíveis.",
     attempted: [], unavailable: [], results: [], wins: 0, charges: null, maxCharges: null,
     phase: "idle", previousWins: null, previousCharges: null, startedAt: 0,
@@ -216,7 +218,7 @@
       </section>
       <section class="bj-view bj-view-hidden" id="bj-view-bosses">
         <div class="bj-boss-view">
-          <div class="bj-boss-heading"><strong>RUN DE CHEFES FAVORITOS</strong><small>O Jarvis prepara cada favorito; clique em Enfrentar no card do jogo para iniciar a luta.</small></div>
+          <div class="bj-boss-heading"><strong>RUN DE CHEFES FAVORITOS</strong><small>${canAutomateBossInput ? "Clique em Iniciar run para enfrentar os favoritos disponíveis em sequência. O Chrome mostrará o aviso de controle da extensão durante a run." : "O Jarvis prepara cada favorito; clique em Enfrentar no card do jogo para iniciar a luta."}</small></div>
           <div class="bj-boss-status" id="bj-boss-status" data-status="idle">
             <span class="bj-boss-dot"></span><strong id="bj-boss-state">Pronto</strong>
             <span id="bj-boss-message">Pronto para enfrentar os chefes favoritos disponíveis.</span>
@@ -1095,7 +1097,7 @@
     if (!panel) return;
     panel.dataset.status = bossRun.status;
     host.querySelector("#bj-boss-state").textContent = ({
-      idle: "Pronto", running: bossRun.phase === "awaiting-user" ? "Aguardando seu clique" : "Em execução", stopping: "Parando", complete: "Concluída",
+      idle: "Pronto", running: bossRun.phase === "awaiting-user" && !bossRun.automatic ? "Aguardando seu clique" : "Em execução", stopping: "Parando", complete: "Concluída",
       paused: "Parada", error: "Atenção"
     })[bossRun.status] || "Pronto";
     host.querySelector("#bj-boss-message").textContent = bossRun.message;
@@ -1148,11 +1150,11 @@
     try {
       const { running, status, message, current, phase, attempted, unavailable, results, wins, charges, maxCharges,
         previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
-        damageBaseline, damagePeak, damageReset } = bossRun;
+        damageBaseline, damagePeak, damageReset, automatic, inputToken, entryRequestedAt } = bossRun;
       sessionStorage.setItem(BOSS_RUN_SESSION_KEY, JSON.stringify({
         running, status, message, current, phase, attempted, unavailable, results, wins, charges, maxCharges,
         previousWins, previousCharges, startedAt, fightStartedAt, fightEndedAt, xpBefore,
-        damageBaseline, damagePeak, damageReset, updatedAt: Date.now()
+        damageBaseline, damagePeak, damageReset, automatic, inputToken, entryRequestedAt, updatedAt: Date.now()
       }));
     } catch (_error) { /* A run continua nesta página se o armazenamento da aba estiver indisponível. */ }
   }
@@ -1168,6 +1170,9 @@
       }
       Object.assign(bossRun, saved, {
         loopBusy: Boolean(saved.running),
+        automatic: saved.automatic === true && canAutomateBossInput,
+        inputToken: saved.inputToken || null,
+        entryRequestedAt: saved.entryRequestedAt || 0,
         inFight: Boolean(saved.running && ["entering", "fighting"].includes(saved.phase)),
         unavailable: Array.isArray(saved.unavailable) ? saved.unavailable : [],
         damageReset: saved.damageReset || {}
@@ -1391,12 +1396,19 @@
       .forEach((button) => button.classList.remove("bj-boss-awaiting-click"));
   }
 
-  async function waitForHumanBossEntry(name, previousCharges, modal) {
+  async function waitForBossEntry(name, previousCharges, modal, requestedAt = 0) {
     const started = Date.now();
-    let entryRequestedAt = 0;
+    let entryRequestedAt = requestedAt;
     while (bossRun.running && !disposed && Date.now() - started < 10 * 60 * 1000) {
       sampleBossDamage();
       if (bossFightVisible(name)) {
+        bossRun.fightStartedAt = entryRequestedAt || Date.now();
+        clearBossButtonHighlight();
+        return true;
+      }
+      const completed = readFavoriteBossCards(modal).find((card) => core.normalizeLookup(card.name) === core.normalizeLookup(name));
+      if (completed?.cooldown && Number.isFinite(bossRun.previousWins) && completed.wins > bossRun.previousWins
+        && readBossCharges(modal)?.left < previousCharges) {
         bossRun.fightStartedAt = entryRequestedAt || Date.now();
         clearBossButtonHighlight();
         return true;
@@ -1422,7 +1434,45 @@
     }
     clearBossButtonHighlight();
     if (!bossRun.running || disposed) return false;
-    throw new Error(`Tempo de espera pelo seu clique em Enfrentar para ${name} esgotado. A run foi pausada.`);
+    throw new Error(`Tempo de espera pela entrada em ${name} esgotado. A run foi pausada.`);
+  }
+
+  async function releaseBossInput() {
+    const token = bossRun.inputToken;
+    bossRun.inputToken = null;
+    if (token) await ext.runtime.sendMessage({ type: "bj:boss-input-end", token }).catch(() => {});
+  }
+
+  function handleBossInputDetached(message) {
+    if (disposed || message?.type !== "bj:boss-input-detached" || message.token !== bossRun.inputToken) return;
+    bossRun.inputToken = null;
+    bossRun.running = false;
+    clearBossButtonHighlight();
+    setBossRunState(bossRun.inFight ? "stopping" : "error", bossRun.inFight
+      ? "O controle do Chrome foi encerrado. A run parará após esta luta."
+      : "O controle do Chrome foi encerrado. Clique em Iniciar run para tentar novamente.");
+  }
+  ext.runtime.onMessage?.addListener(handleBossInputDetached);
+
+  async function enterPreparedBoss(name, charges, modal) {
+    if (!bossRun.automatic) return waitForBossEntry(name, charges, modal);
+    if (!bossRun.running || disposed) return false;
+    let button = findBossCell(modal, name)?.querySelector(".boss-cell-go");
+    if (!button?.isConnected || button.disabled || !isVisible(button) || !button.closest(".boss-cell")?.classList.contains("expanded")) {
+      button = await waitForBossButton(modal, name);
+    }
+    if (!button) throw new Error(`${name} ficou indisponível antes da entrada.`);
+    button.scrollIntoView({ block: "nearest", behavior: "instant" });
+    await delay(300);
+    if (!bossRun.running || disposed) return false;
+    // Grave antes de enviar: uma atualização ou resposta perdida não pode
+    // transformar uma entrada incerta em um segundo clique que gaste outra carga.
+    bossRun.phase = "entering";
+    bossRun.entryRequestedAt = Date.now();
+    setBossRunState("running", `Iniciando ${name} pelo Chrome…`);
+    const response = await ext.runtime.sendMessage({ type: "bj:boss-input-click", token: bossRun.inputToken, name, charges });
+    if (!response?.ok) throw new Error(response?.error || "O Chrome não confirmou o clique em Enfrentar.");
+    return waitForBossEntry(name, charges, modal, bossRun.entryRequestedAt);
   }
 
   async function waitForBossExit(name) {
@@ -1514,6 +1564,7 @@
     bossRun.previousCharges = null;
     bossRun.fightStartedAt = 0;
     bossRun.fightEndedAt = 0;
+    bossRun.entryRequestedAt = 0;
     bossRun.xpBefore = {};
     bossRun.damageBaseline = {};
     bossRun.damagePeak = {};
@@ -1530,12 +1581,20 @@
 
   async function runFavoriteBosses() {
     try {
+      if (bossRun.automatic) {
+        const response = await ext.runtime.sendMessage(bossRun.inputToken
+          ? { type: "bj:boss-input-status", token: bossRun.inputToken }
+          : { type: "bj:boss-input-start" });
+        if (!response?.ok) throw new Error(response?.error || "Não foi possível iniciar o controle de chefes no Chrome.");
+        bossRun.inputToken ||= response.token;
+        persistBossRun();
+      }
       for (let index = 0; index < 100 && bossRun.running; index += 1) {
         if (automationBusy || refreshBusy) throw new Error("Outra ação do Jarvis está em andamento. Tente iniciar a run novamente.");
         if (bossRun.current) {
-          if (bossRun.phase === "awaiting-user") {
+          if (["awaiting-user", "entering"].includes(bossRun.phase)) {
             let modal = document.querySelector("#boss-modal");
-            if (!bossFightVisible(bossRun.current) && !isVisible(modal)
+            if (bossRun.phase === "awaiting-user" && !bossFightVisible(bossRun.current) && !isVisible(modal)
               && !(readBossCharges(modal)?.left < bossRun.previousCharges)) {
               await delay(1500);
               if (!bossRun.running) break;
@@ -1552,10 +1611,13 @@
                 }
                 clearBossButtonHighlight();
                 button.classList.add("bj-boss-awaiting-click");
-                setBossRunState("running", `Clique em Enfrentar no card destacado de ${bossRun.current} no jogo.`);
+                setBossRunState("running", bossRun.automatic ? `Preparando ${bossRun.current}…` : `Clique em Enfrentar no card destacado de ${bossRun.current} no jogo.`);
               }
             }
-            if (!await waitForHumanBossEntry(bossRun.current, bossRun.previousCharges, modal)) break;
+            const entered = bossRun.phase === "entering"
+              ? await waitForBossEntry(bossRun.current, bossRun.previousCharges, modal, bossRun.entryRequestedAt || Date.now())
+              : await enterPreparedBoss(bossRun.current, bossRun.previousCharges, modal);
+            if (!entered) break;
             recordBossAttempt(bossRun.current);
             bossRun.phase = "fighting";
             bossRun.inFight = true;
@@ -1609,14 +1671,15 @@
         bossRun.previousCharges = charges.left;
         bossRun.fightStartedAt = 0;
         bossRun.fightEndedAt = 0;
+        bossRun.entryRequestedAt = 0;
         bossRun.xpBefore = xpBefore;
         bossRun.damageBaseline = readBossDamageTotals();
         bossRun.damagePeak = {};
         bossRun.damageReset = {};
         clearBossButtonHighlight();
         button.classList.add("bj-boss-awaiting-click");
-        setBossRunState("running", `Clique em Enfrentar no card destacado de ${name} no jogo.`);
-        if (!await waitForHumanBossEntry(name, charges.left, modal)) break;
+        setBossRunState("running", bossRun.automatic ? `Preparando a entrada em ${name}…` : `Clique em Enfrentar no card destacado de ${name} no jogo.`);
+        if (!await enterPreparedBoss(name, charges.left, modal)) break;
         recordBossAttempt(name);
         bossRun.phase = "fighting";
         bossRun.inFight = true;
@@ -1636,12 +1699,16 @@
       bossRun.inFight = Boolean(bossRun.current && bossFightVisible(bossRun.current));
       if (!bossRun.inFight) bossRun.current = null;
       setBossRunState("error", `${error.message} Nenhum outro chefe será iniciado.`);
+    } finally {
+      await releaseBossInput();
+      persistBossRun();
     }
   }
 
-  function toggleBossRun() {
+  function toggleBossRun(event) {
     if (bossRun.running) {
       bossRun.running = false;
+      releaseBossInput().catch(() => {});
       clearBossButtonHighlight();
       setBossRunState(bossRun.inFight ? "stopping" : "paused", bossRun.inFight
         ? "Parando após a luta atual. Nenhum outro chefe será iniciado."
@@ -1657,8 +1724,13 @@
       setBossRunState("error", "Aguarde a ação atual do Jarvis terminar antes de iniciar a run.");
       return;
     }
+    if (canAutomateBossInput && event?.isTrusted !== true) {
+      setBossRunState("error", "Clique em Iniciar run para autorizar o controle dos chefes nesta aba.");
+      return;
+    }
     Object.assign(bossRun, {
       running: true, inFight: false, status: "running", current: null,
+      automatic: canAutomateBossInput, inputToken: null, entryRequestedAt: 0,
       loopBusy: true,
       message: "Lendo os chefes favoritos e as cargas…", attempted: [], unavailable: [], results: [],
       wins: 0, charges: null, maxCharges: null, phase: "choosing",
@@ -3060,7 +3132,7 @@
     if (action === "view-bosses") await switchView("bosses", true);
     if (action === "view-sets") await switchView("sets", true);
     if (action === "view-optimizer") await switchView("optimizer", true);
-    if (action === "toggle-boss-run") toggleBossRun();
+    if (action === "toggle-boss-run") toggleBossRun(event);
     if (action === "select-set-character") {
       selectedSetCharacter = event.target.closest("button")?.dataset.name || null;
       renderSets();
@@ -3249,6 +3321,8 @@
   document.addEventListener("baiak-jarvis:dispose", () => {
     disposed = true;
     bossRun.running = false;
+    releaseBossInput().catch(() => {});
+    ext.runtime.onMessage?.removeListener(handleBossInputDetached);
     if (timer) clearInterval(timer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     gameObserver?.disconnect();
