@@ -76,12 +76,14 @@
   let refreshBusy = false;
   let huntRuns = [];
   let huntArchive = {};
+  let huntMeasurements = {};
   let dailyXp = { day: core.brazilDayKey(Date.now()), xp: 0, waves: 0, partial: false };
   let dailyXpSaveTimer = null;
   const huntWriterId = `${Date.now()}-${Math.random()}`;
   const persistHuntState = core.createLatestWriteQueue(() => ({
     bjHuntRuns: huntRuns,
     bjHuntArchive: huntArchive,
+    bjHuntMeasurements: huntMeasurements,
     bjDailyXp: dailyXp,
     bjHuntWriter: huntWriterId
   }), (state) => ext.storage.local.set(state));
@@ -2575,7 +2577,9 @@
       balance: metricDelta(telemetry.balance, huntTracker.startBalance)
     };
     const allRuns = [...huntRuns, record];
-    huntArchive = core.archiveHuntRuns(huntArchive, allRuns.slice(0, Math.max(0, allRuns.length - 200)));
+    const archivedRuns = allRuns.slice(0, Math.max(0, allRuns.length - 200));
+    huntArchive = core.archiveHuntRuns(huntArchive, archivedRuns);
+    huntMeasurements = core.archiveHuntMeasurements(huntMeasurements, archivedRuns);
     huntRuns = allRuns.slice(-200);
     rollDailyXp(completedAt);
     dailyXp = { ...dailyXp, waves: dailyXp.waves + 1 };
@@ -2668,7 +2672,7 @@
   }
 
   function renderHuntComparisons(item, summaries) {
-    const references = summaries.filter((candidate) => candidate !== item);
+    const references = summaries.filter((candidate) => candidate !== item && candidate.runs > 0);
     if (!references.length) return "";
     return `<div class="bj-versus-list"><b>COMPARAÇÃO COM TODAS AS HUNTS</b>${references.map((reference) => {
       const xpPercent = core.relativeDifference(item.xpPerHour, reference.xpPerHour);
@@ -2687,9 +2691,10 @@
 
   function renderHuntHistory() {
     if (rollDailyXp()) persistHuntState().catch(() => {});
-    const summaries = core.summarizeHuntRuns(huntRuns, huntArchive);
+    const summaries = core.summarizeHuntRuns(huntRuns, huntArchive, huntMeasurements);
+    const measuredSummaries = summaries.filter((item) => item.runs > 0);
     const totalWaves = huntRuns.length + Object.values(huntArchive).reduce((sum, group) => sum + group.runs, 0);
-    const best = summaries[0] || null;
+    const best = measuredSummaries[0] || null;
     host.querySelector("#bj-hunt-run-count").textContent = `${totalWaves} ${totalWaves === 1 ? "wave" : "waves"}`;
     host.querySelector("#bj-live-run").innerHTML = `<span class="bj-live-dot"></span><div><b>MEDIÇÃO EM TEMPO REAL</b><small>${escapeHtml(huntMonitorMessage)}</small></div>`;
     const currentHunt = huntTracker?.huntName || settings.huntName || huntRuns.at(-1)?.huntName || "";
@@ -2698,7 +2703,7 @@
       <div class="bj-level-context">${escapeHtml(currentHunt || "Hunt atual")} · XP real recebida por personagem nas últimas 5 waves completas</div>
       <div class="bj-level-list">${members.map((member) => {
         const profile = profiles[member.name] || member;
-        const result = core.projectLevelFromWaves(huntRuns, currentHunt, { name: member.name, xpRemaining: profile.xpRemaining });
+        const result = core.projectLevelFromWaves(core.huntMeasurementRuns(huntRuns, currentHunt, huntMeasurements), currentHunt, { name: member.name, xpRemaining: profile.xpRemaining });
         return `<article class="bj-level-card"><div><strong>${escapeHtml(member.name)}</strong><small>Nv. ${escapeHtml(member.level || "—")}</small></div>
           <dl><div><dt>Falta para upar</dt><dd>${result.xpRemaining == null ? "Aguardando Skills" : `${formatNumber(result.xpRemaining)} XP`}</dd></div>
           <div><dt>XP por wave</dt><dd>${result.samples ? `${formatNumber(Math.round(result.averageXpPerWave))} XP` : "Aguardando medição"}</dd></div></dl>
@@ -2707,7 +2712,7 @@
       }).join("")}</div>` : '<div class="bj-empty-state">Aguardando os personagens aparecerem na Party.</div>';
     host.querySelector("#bj-hunt-summary").innerHTML = `
       <article><small>Melhor rendimento</small><strong>${best ? escapeHtml(best.huntName) : "—"}</strong><span>${best ? `${formatNumber(Math.round(best.xpPerHour))} XP/h` : "Aguardando waves"}</span></article>
-      <article><small>Hunts comparadas</small><strong>${summaries.length}</strong><span>${totalWaves} waves completas</span></article>
+      <article><small>Hunts comparadas</small><strong>${measuredSummaries.length}</strong><span>${totalWaves} waves completas</span></article>
       <article><small>XP de hoje</small><strong>${formatNumber(dailyXp.xp)}</strong><span>Hunt Analyzer · ${dailyXp.waves} ${dailyXp.waves === 1 ? "wave registrada" : "waves registradas"} · zera 00h (Brasília)</span></article>`;
 
     const comparison = host.querySelector("#bj-hunt-comparison");
@@ -2715,19 +2720,21 @@
       comparison.innerHTML = `<div class="bj-empty-state">Ainda não há wave completa. Deixe a hunt rodar da wave 1 até o boss.</div>`;
     } else {
       const maxRate = Math.max(...summaries.map((item) => item.xpPerHour), 1);
-      comparison.innerHTML = `${summaries.length < 2 ? '<p class="bj-comparison-note">Registre outra hunt para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item, index) => {
+      comparison.innerHTML = `${measuredSummaries.length < 2 ? '<p class="bj-comparison-note">Registre waves em duas hunts para liberar a comparação direta.</p>' : ""}<div class="bj-comparison-list">${summaries.map((item) => {
         const key = core.normalizeLookup(item.huntName);
         const expanded = selectedHuntKey === key;
-        return `<article class="bj-hunt-card ${index === 0 ? "bj-best-hunt" : ""} ${expanded ? "bj-expanded" : ""}" data-hunt-card="${escapeHtml(key)}" role="button" tabindex="0" aria-expanded="${expanded}">
-          <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><div><b>Média ${formatNumber(Math.round(item.xpPerHour))} XP/h</b><i>${expanded ? "−" : "+"}</i></div></div>
-          <div class="bj-rate-bar"><i style="width:${Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1)}%"></i></div>
-          <small>Média recalculada com ${item.runs} ${item.runs === 1 ? "wave" : "waves"} · ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave</small>
-          ${expanded ? `<div class="bj-card-details">${renderHuntComparisons(item, summaries)}
+        return `<article class="bj-hunt-card ${item === best ? "bj-best-hunt" : ""} ${expanded ? "bj-expanded" : ""}" data-hunt-card="${escapeHtml(key)}" role="button" tabindex="0" aria-expanded="${expanded}">
+          <div class="bj-comparison-head"><strong>${escapeHtml(item.huntName)}</strong><div><b>${item.runs ? `Média ${formatNumber(Math.round(item.xpPerHour))} XP/h` : "Aguardando nova wave"}</b><i>${expanded ? "−" : "+"}</i></div></div>
+          <div class="bj-rate-bar"><i style="width:${item.runs ? Math.max(3, item.xpPerHour / maxRate * 100).toFixed(1) : 0}%"></i></div>
+          <small>${item.runs ? `Média recalculada com ${item.runs} ${item.runs === 1 ? "wave" : "waves"} · ${formatElapsed(item.averageDurationSeconds)} · ${formatNumber(Math.round(item.averageXp))} XP/wave` : "A próxima wave completa iniciada após o reset começa a nova média."}</small>
+          ${item.resetAt ? `<small class="bj-measurement-since">Desde ${new Date(item.resetAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} (Brasília)</small>` : ""}
+          ${expanded && item.runs ? `<div class="bj-card-details">${renderHuntComparisons(item, summaries)}
             <div class="bj-hunt-metrics">
               <span><b>Loot médio</b>${Number.isFinite(item.averageLoot) ? formatNumber(Math.round(item.averageLoot)) : "—"} gold</span>
               <span><b>Lucro médio</b>${Number.isFinite(item.averageBalance) ? formatNumber(Math.round(item.averageBalance)) : "—"} gold</span>
             </div>
-          </div>` : '<span class="bj-expand-hint">Clique para abrir as comparações</span>'}
+          </div>` : ""}
+          <div class="bj-hunt-card-actions"><span class="bj-expand-hint">${expanded ? "Clique para fechar" : "Clique para abrir as comparações"}</span><button type="button" class="bj-reset-hunt" data-action="reset-hunt-average" data-hunt-key="${escapeHtml(key)}" aria-label="Resetar média de ${escapeHtml(item.huntName)}" title="Recomeçar XP/h, loot e lucro nas próximas waves. Preserva o histórico e a XP de hoje.">↺ Resetar média</button></div>
         </article>`;
       }).join("")}</div>`;
     }
@@ -3087,6 +3094,16 @@
   }
 
   host.addEventListener("click", async (event) => {
+    const resetButton = event.target.closest('[data-action="reset-hunt-average"]');
+    if (resetButton) {
+      const key = resetButton.dataset.huntKey;
+      const hunt = core.summarizeHuntRuns(huntRuns, huntArchive, huntMeasurements).find((item) => core.normalizeLookup(item.huntName) === key);
+      if (!hunt) return;
+      huntMeasurements = { ...huntMeasurements, [key]: { huntName: hunt.huntName, resetAt: Date.now(), archive: {} } };
+      renderHuntHistory();
+      await persistHuntState();
+      return;
+    }
     const huntCard = event.target.closest("[data-hunt-card]");
     if (huntCard) {
       selectedHuntKey = selectedHuntKey === huntCard.dataset.huntCard ? null : huntCard.dataset.huntCard;
@@ -3161,6 +3178,7 @@
 
   host.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
+    if (event.target.closest("button")) return;
     const huntCard = event.target.closest("[data-hunt-card]");
     if (!huntCard) return;
     event.preventDefault();
@@ -3246,7 +3264,7 @@
     header.addEventListener("pointercancel", () => { origin = null; });
   }
 
-  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjDailyXp: null, bjBossDay: null, bjHuntXpLive: {} }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjDailyXp, bjBossDay, bjHuntXpLive }) => {
+  ext.storage.local.get({ bjSettings: defaults, bjProfiles: null, bjHuntOptions: ["Cobras"], bjHuntRuns: [], bjHuntArchive: {}, bjHuntMeasurements: {}, bjDailyXp: null, bjBossDay: null, bjHuntXpLive: {} }).then(({ bjSettings, bjProfiles, bjHuntOptions, bjHuntRuns, bjHuntArchive, bjHuntMeasurements, bjDailyXp, bjBossDay, bjHuntXpLive }) => {
     settings = { ...defaults, ...bjSettings, codexAutoEnabled: false };
     if (bjSettings?.codexAutoEnabled) ext.storage.local.set({ bjSettings: settings }).catch(() => {});
     profiles = { ...profiles, ...(bjProfiles || {}) };
@@ -3254,6 +3272,7 @@
     huntXpLive = { ...(bjHuntXpLive && typeof bjHuntXpLive === "object" ? bjHuntXpLive : {}), ...huntXpLive };
     huntRuns = Array.isArray(bjHuntRuns) ? bjHuntRuns : [];
     huntArchive = bjHuntArchive && typeof bjHuntArchive === "object" ? bjHuntArchive : {};
+    huntMeasurements = bjHuntMeasurements && typeof bjHuntMeasurements === "object" ? bjHuntMeasurements : {};
     const today = core.brazilDayKey(Date.now());
     const validDaily = bjDailyXp?.day === today && Number.isFinite(bjDailyXp.xp) && bjDailyXp.xp >= 0
       && Number.isFinite(bjDailyXp.waves) && bjDailyXp.waves >= 0;
@@ -3285,17 +3304,12 @@
       renderHuntOptions();
       if (settings.activeView === "theory") renderTheoreticalHunts(true);
     }
-    if (area === "local" && changes.bjHuntRuns && changes.bjHuntWriter?.newValue !== huntWriterId) {
-      huntRuns = Array.isArray(changes.bjHuntRuns.newValue) ? changes.bjHuntRuns.newValue : [];
-      renderHuntHistory();
-    }
-    if (area === "local" && changes.bjHuntArchive && changes.bjHuntWriter?.newValue !== huntWriterId) {
-      huntArchive = changes.bjHuntArchive.newValue || {};
-      renderHuntHistory();
-    }
-    if (area === "local" && changes.bjDailyXp && changes.bjHuntWriter?.newValue !== huntWriterId) {
-      const incoming = changes.bjDailyXp.newValue;
-      if (incoming?.day === core.brazilDayKey(Date.now())) dailyXp = incoming;
+    if (area === "local" && changes.bjHuntWriter?.newValue !== huntWriterId
+      && (changes.bjHuntRuns || changes.bjHuntArchive || changes.bjHuntMeasurements || changes.bjDailyXp)) {
+      if (changes.bjHuntRuns) huntRuns = Array.isArray(changes.bjHuntRuns.newValue) ? changes.bjHuntRuns.newValue : [];
+      if (changes.bjHuntArchive) huntArchive = changes.bjHuntArchive.newValue || {};
+      if (changes.bjHuntMeasurements) huntMeasurements = changes.bjHuntMeasurements.newValue || {};
+      if (changes.bjDailyXp?.newValue?.day === core.brazilDayKey(Date.now())) dailyXp = changes.bjDailyXp.newValue;
       renderHuntHistory();
     }
   });

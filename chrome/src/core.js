@@ -304,14 +304,35 @@
     return Object.fromEntries(groups);
   }
 
-  function summarizeHuntRuns(runs, archive = {}) {
-    return Object.values(archiveHuntRuns(archive, runs)).map((group) => ({
+  function huntMeasurementRuns(runs, huntName, measurements = {}) {
+    const key = normalizeLookup(huntName);
+    const resetAt = measurements[key]?.resetAt;
+    return (Array.isArray(runs) ? runs : []).filter((run) => normalizeLookup(run?.huntName) === key
+      && (!Number.isFinite(resetAt) || (Number.isFinite(run?.startedAt) && run.startedAt >= resetAt)));
+  }
+
+  function archiveHuntMeasurements(measurements, runs) {
+    return Object.fromEntries(Object.entries(measurements || {}).map(([key, window]) => [key, {
+      ...window,
+      archive: archiveHuntRuns(window.archive, huntMeasurementRuns(runs, window.huntName, measurements))
+    }]));
+  }
+
+  function summarizeHuntRuns(runs, archive = {}, measurements = {}) {
+    const groups = archiveHuntRuns(archive, runs);
+    for (const [key, window] of Object.entries(measurements)) {
+      if (!Number.isFinite(window?.resetAt) || normalizeLookup(window.huntName) !== key) continue;
+      const measured = archiveHuntRuns(window.archive, huntMeasurementRuns(runs, window.huntName, measurements));
+      groups[key] = { ...(measured[key] || { huntName: window.huntName, runs: 0, totalDurationSeconds: 0,
+        totalXp: 0, totalLoot: 0, lootRuns: 0, totalBalance: 0, balanceRuns: 0, bestXpPerHour: 0 }), resetAt: window.resetAt };
+    }
+    return Object.values(groups).map((group) => ({
         ...group,
-        averageDurationSeconds: group.totalDurationSeconds / group.runs,
-        averageXp: group.totalXp / group.runs,
+        averageDurationSeconds: group.runs ? group.totalDurationSeconds / group.runs : 0,
+        averageXp: group.runs ? group.totalXp / group.runs : 0,
         averageLoot: group.lootRuns ? group.totalLoot / group.lootRuns : null,
         averageBalance: group.balanceRuns ? group.totalBalance / group.balanceRuns : null,
-        xpPerHour: group.totalXp * 3600 / group.totalDurationSeconds
+        xpPerHour: group.totalDurationSeconds ? group.totalXp * 3600 / group.totalDurationSeconds : 0
       })).sort((a, b) => b.xpPerHour - a.xpPerHour || a.averageDurationSeconds - b.averageDurationSeconds);
   }
 
@@ -949,6 +970,8 @@
     observeDailyHuntXp,
     createLatestWriteQueue,
     archiveHuntRuns,
+    archiveHuntMeasurements,
+    huntMeasurementRuns,
     brazilDayKey,
     catalogStageFromCells,
     clean,

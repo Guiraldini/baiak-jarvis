@@ -2,6 +2,15 @@
 
 Extensão local para acompanhar a party do Baiak Idle, analisar a hunt selecionada e controlar o ciclo configurado de stamina.
 
+## Versão 0.8.38
+
+- cada card de hunt tem **Resetar média** para medir o rendimento atual, como durante eventos de XP;
+- somente waves completas iniciadas depois do reset entram na nova média de XP/h, tempo, loot e lucro;
+- mantém o histórico completo, a XP de hoje e as outras hunts; a medição persiste ao reabrir o jogo e após mais de 200 waves;
+- as previsões de nível da hunt reiniciada também usam as novas medições por personagem.
+
+Após atualizar os arquivos, recarregue a extensão em `chrome://extensions`. O jogo pode continuar aberto.
+
 ## Versão 0.8.37
 
 - adiciona entrada automática em **Enfrentar** pelo controle de entrada do Chrome: clique em **Iniciar run** e o Jarvis aguarda cada vitória antes de preparar o próximo favorito;
